@@ -332,18 +332,32 @@ const MapCore = (() => {
         });
     }
     // 長い一覧の下の方で押しても、地図が見える位置まで戻す(動きを減らす設定なら一瞬で)。
+    // 画面に固定されたヘッダー/下のナビを除いた「見える範囲」を求める
+    function visibleBand() {
+        let top = 0, bottom = innerHeight;
+        document.querySelectorAll('body *').forEach(el => {
+            const st = getComputedStyle(el);
+            if (st.position !== 'fixed' && st.position !== 'sticky') return;
+            if (st.display === 'none' || st.visibility === 'hidden') return;
+            const b = el.getBoundingClientRect();
+            if (!b.height || b.width < innerWidth / 2 || b.height > innerHeight / 3) return;
+            if (b.top <= 1 && b.bottom > 0) top = Math.max(top, b.bottom);
+            else if (b.bottom >= innerHeight - 1 && b.top < innerHeight) bottom = Math.min(bottom, b.top);
+        });
+        return { top, bottom };
+    }
     function revealMap() {
         if (document.body.classList.contains('map-focus')) return;
         const canvas = document.querySelector('.map-canvas');
         if (!canvas || !canvas.getBoundingClientRect) return;
         const r = canvas.getBoundingClientRect();
-        const top = Array.from(document.querySelectorAll('.tab-nav,.app-header')).reduce((h, el) => {
-            const st = getComputedStyle(el), b = el.getBoundingClientRect();
-            return (st.position === 'sticky' || st.position === 'fixed') && b.top <= 0 && b.bottom > 0 && b.height < innerHeight / 2 ? Math.max(h, b.bottom) : h;
-        }, 0);
-        if (r.top >= top && r.top + Math.min(r.height, 200) <= innerHeight) return; // もう見えている
+        const { top, bottom } = visibleBand();
+        const avail = bottom - top;
+        // 入るなら見える範囲の真ん中に、入らないならヘッダーのすぐ下に上端を合わせる
+        const want = r.height <= avail ? top + (avail - r.height) / 2 : top + 8;
+        if (Math.abs(r.top - want) < 4) return;
         const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-        window.scrollTo({ top: Math.max(0, scrollY + r.top - top - 8), behavior: reduce ? 'auto' : 'smooth' });
+        window.scrollTo({ top: Math.max(0, scrollY + r.top - want), behavior: reduce ? 'auto' : 'smooth' });
     }
     function focusMarker(customerId) {
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
