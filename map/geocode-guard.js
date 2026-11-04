@@ -46,11 +46,20 @@ const GeocodeGuard = (() => {
         let n = raw.normalize('NFKC').replace(/[‐－―ー−]/g, m => m === 'ー' ? m : '-');
         n = n.replace(/〒?\s*\d{3}-?\d{4}\s*/, ' ');
         add(n);
-        n = n.split(/[\r\n]/)[0];
-        add(n.replace(/[(（][^)）]*[)）]/g, ' '));
+        n = n.split(/[\r\n]/)[0].replace(/[(（][^)）]*[)）]/g, ' ');
+        // 丁目・番・号を「-」に（5丁目1番18号 → 5-1-18）
+        n = n.replace(/(\d+)丁目\s*(\d+)(?:番地?|-)\s*(\d+)号?/g, '$1-$2-$3').replace(/(\d+)丁目\s*(\d+)番地?/g, '$1-$2');
+        // 階・F・号室・部屋番号を外す（依頼書は「…5-1-18 3階」のように書いてくることがある）
+        const noFloor = n.replace(/\s*(?:地下|B)?\d+\s*(?:階|F|Ｆ)(?![a-zA-Z]).*$/i, ' ')
+            .replace(/\s*\d+\s*号室.*$/, ' ').replace(/\s*#\d+.*$/, ' ');
+        add(noFloor);
+        add(n);
         // 番地(数字-数字…)の後ろの建物名・階数を外す
         const m = n.match(/^(.*?\d+(?:-\d+){1,3})(?=\D|$)/);
         if (m) add(m[1]);
+        // 階数・部屋番号を外したものを最初に試す（そのままだと別の場所や見つからないことがある）
+        const fl = out.indexOf(noFloor.replace(/\s+/g, ' ').trim());
+        if (fl > 0) out.unshift(out.splice(fl, 1)[0]);
         return out;
     }
     return Object.freeze({ create, borrowedMapsKey, addressVariants, NOTICE });
