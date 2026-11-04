@@ -349,13 +349,35 @@ const MapCore = (() => {
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
         markSelected(customerId);
         if (marker) {
+            const old = document.getElementById('listPickCard'); if (old) old.remove();
             revealMap();
             map.setZoom(16);
             map.panTo(marker.getPosition());
             google.maps.event.trigger(marker, 'click');
         } else {
-            openEdit(customerId);
+            // 地図が無い/位置が無いときは編集を開かず、地図の場所に簡単な情報カードを出す
+            revealMap();
+            showPickCard(customerId);
         }
+    }
+
+    function showPickCard(customerId) {
+        const customer = DataStorage.getCustomers().find(c => c.id === customerId);
+        const host = document.querySelector('.map-canvas');
+        if (!customer || !host) return;
+        const esc = ExpenseImport.escapeHtml;
+        const statusText = { pending: '未アポ', appointed: 'アポ済み', completed: '完了' };
+        const route = DataStorage.getRoutes().find(r => r.id === customer.routeId);
+        const why = (typeof google === 'undefined' || !map) ? '地図を表示できないため、位置は出せません。' : 'この訪問先はまだ地図の位置がありません。';
+        let card = document.getElementById('listPickCard');
+        if (!card) { card = document.createElement('div'); card.id = 'listPickCard'; card.className = 'list-pick-card'; card.setAttribute('role', 'status'); host.appendChild(card); }
+        card.innerHTML = `<button type="button" class="list-pick-close" aria-label="閉じる" onclick="this.parentNode.remove()">×</button>`
+            + `<div class="list-pick-title">${esc(customer.company || '')}</div>`
+            + (customer.address ? `<div>📍 ${esc(customer.address)}</div>` : '')
+            + (route ? `<div>🗺️ ${esc(route.name || '')}</div>` : '')
+            + `<div>${esc(statusText[customer.status] || '')}</div>`
+            + `<div class="list-pick-note">${why}</div>`
+            + `<button type="button" class="info-btn info-btn-edit" onclick="MapCore.openEdit(${esc(JSON.stringify(customer.id))})">日時・備考を編集</button>`;
     }
 
     function openEdit(customerId) {
