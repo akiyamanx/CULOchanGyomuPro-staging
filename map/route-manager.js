@@ -43,7 +43,7 @@ const RouteManager = (() => {
             if (members.length > 0) {
                 html += `<div class="route-stops">`;
                 members.forEach((m, idx) => {
-                    html += `<div class="route-stop" onclick="MapCore.focusMarker(${jsArg(m.id)})">`;
+                    html += `<div class="route-stop" data-stop-id="${esc(m.id)}" onclick="MapCore.focusMarker(${jsArg(m.id)})">`;
                     html += `<span class="stop-number">${idx + 1}</span>`;
                     html += `<span>${esc(m.company || '不明')}`;
                     if (m.unitCount > 1) html += ` (${m.unitCount}台)`;
@@ -64,7 +64,7 @@ const RouteManager = (() => {
             html += `</div>`;
             html += `<div class="route-stops">`;
             unassigned.forEach((m, idx) => {
-                html += `<div class="route-stop" onclick="MapCore.focusMarker(${jsArg(m.id)})">`;
+                html += `<div class="route-stop" data-stop-id="${esc(m.id)}" onclick="MapCore.focusMarker(${jsArg(m.id)})">`;
                 html += `<span class="stop-number">-</span>`;
                 html += `<span>${esc(m.company || '不明')}</span>`;
                 html += `</div>`;

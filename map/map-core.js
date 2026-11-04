@@ -324,11 +324,34 @@ const MapCore = (() => {
         listEl.innerHTML = html;
     }
 
+    // 一覧で押した行を目立たせる(訪問先一覧・ルートの行)。
+    function markSelected(customerId) {
+        document.querySelectorAll('.list-selected').forEach(el => { el.classList.remove('list-selected'); el.removeAttribute('aria-current'); });
+        document.querySelectorAll('[data-customer-id],[data-stop-id]').forEach(el => {
+            if ((el.dataset.customerId || el.dataset.stopId) === customerId) { el.classList.add('list-selected'); el.setAttribute('aria-current', 'true'); }
+        });
+    }
+    // 長い一覧の下の方で押しても、地図が見える位置まで戻す(動きを減らす設定なら一瞬で)。
+    function revealMap() {
+        if (document.body.classList.contains('map-focus')) return;
+        const canvas = document.querySelector('.map-canvas');
+        if (!canvas || !canvas.getBoundingClientRect) return;
+        const r = canvas.getBoundingClientRect();
+        const top = Array.from(document.querySelectorAll('.tab-nav,.app-header')).reduce((h, el) => {
+            const st = getComputedStyle(el), b = el.getBoundingClientRect();
+            return (st.position === 'sticky' || st.position === 'fixed') && b.top <= 0 && b.bottom > 0 && b.height < innerHeight / 2 ? Math.max(h, b.bottom) : h;
+        }, 0);
+        if (r.top >= top && r.top + Math.min(r.height, 200) <= innerHeight) return; // もう見えている
+        const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: Math.max(0, scrollY + r.top - top - 8), behavior: reduce ? 'auto' : 'smooth' });
+    }
     function focusMarker(customerId) {
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
+        markSelected(customerId);
         if (marker) {
-            map.setCenter(marker.getPosition());
+            revealMap();
             map.setZoom(16);
+            map.panTo(marker.getPosition());
             google.maps.event.trigger(marker, 'click');
         } else {
             openEdit(customerId);
