@@ -26,12 +26,32 @@
     function isSplit(c) { var t = normalize(c).type; return t === 'hwFrom' || t === 'hwUntil'; }
     function nextType(t) { return TYPES[(TYPES.indexOf(t) + 1) % TYPES.length]; }
 
+    // ICの点（Wikidata）は高速の本線上にあることが多く、下道だけでそこへ行こうとすると
+    // 大回りになる（例: 浮島ICは首都高川崎線の上）。一般道側の出入口の点を使う。
+    // 位置は OpenStreetMap の道路で確認（浮島町線・国道409号の接続部）。
+    var IC_ACCESS = {
+        '浮島IC': { lat: 35.51951, lng: 139.78666 },
+        '木更津金田IC': { lat: 35.43002, lng: 139.92702 }
+    };
+    function accessPoint(ic) {
+        var a = ic && IC_ACCESS[ic.name];
+        return a ? { lat: a.lat, lng: a.lng } : { lat: ic.lat, lng: ic.lng };
+    }
+    // 下道部分が直線距離に比べて長すぎる（ICへの行き方がおかしい）かどうか
+    function generalDetour(from, to, choice, generalM) {
+        var c = normalize(choice);
+        if (!c.ic || (c.type !== 'hwFrom' && c.type !== 'hwUntil')) return null;
+        var p = c.type === 'hwFrom' ? from : to;
+        if (!p || p.lat == null || p.lng == null || !isFinite(p.lat) || !isFinite(p.lng)) return null;
+        var straight = haversine(p, accessPoint(c.ic)), km = generalM / 1000;
+        return { straightKm: straight, generalKm: km, warn: km > Math.max(straight * 2.5, straight + 15) };
+    }
     // 呼び出す区間（脚）を決める
     function planLegs(origin, dest, choice) {
         var c = normalize(choice);
         if (c.type === 'general') return [{ origin: origin, destination: dest, avoidHighways: true, part: 'general' }];
         if (c.type === 'highway' || !c.ic) return [{ origin: origin, destination: dest, avoidHighways: false, part: 'highway', fallback: c.type !== 'highway' }];
-        var ic = { lat: c.ic.lat, lng: c.ic.lng };
+        var ic = accessPoint(c.ic);
         if (c.type === 'hwFrom') return [
             { origin: origin, destination: ic, avoidHighways: true, part: 'general' },
             { origin: ic, destination: dest, avoidHighways: false, part: 'highway' }];
@@ -122,7 +142,7 @@
     }
 
     var api = { TYPES: TYPES, NAMES: NAMES, ICONS: ICONS, normalize: normalize, toStored: toStored, isSplit: isSplit, nextType: nextType,
-        planLegs: planLegs, compose: compose, breakdown: breakdown, label: label, haversine: haversine,
+        planLegs: planLegs, accessPoint: accessPoint, generalDetour: generalDetour, IC_ACCESS: IC_ACCESS, compose: compose, breakdown: breakdown, label: label, haversine: haversine,
         nearestIC: nearestIC, samePlace: samePlace, detour: detour, icsNearSegment: icsNearSegment, searchICs: searchICs, bumpFavorite: bumpFavorite, favoriteList: favoriteList };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.HighwaySegments = api;

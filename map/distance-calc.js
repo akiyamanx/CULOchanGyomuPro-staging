@@ -118,6 +118,8 @@ const DistanceCalc = (() => {
                     ic: choice.ic ? choice.ic.name : undefined
                 });
                 if (HS) seg.breakdown = HS.breakdown(Object.assign({ choice }, c));
+                const gd = HS && HS.generalDetour ? HS.generalDetour(from, to, choice, c.generalM) : null;
+                if (gd && gd.warn && !seg.detourWarn) seg.detourWarn = `⚠️ 下道部分が長すぎます（${choice.ic.name}まで直線で約${Math.round(gd.straightKm)}kmなのに下道${Math.round(gd.generalKm)}km）。ICの入口の位置がずれている可能性があります`;
                 segments.push(seg);
                 totalKm += c.km;
                 highwayKm += c.highwayKm;
