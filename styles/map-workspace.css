@@ -107,3 +107,5 @@ body.map-focus .workflow-toast { z-index:14000; }
 .visit-call-info p { margin:0; }
 #visitPhoneActions { flex:0 1 auto;max-width:100%; }
 #visitPhoneActions .visit-call { width:auto; }
+.visit-filter-info { flex:1 1 100%;margin:8px 0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#f6f9fc;font-size:14px;line-height:1.5;white-space:normal;overflow-wrap:anywhere; }
+.visit-filter-info[hidden] { display:none; }
