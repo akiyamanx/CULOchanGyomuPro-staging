@@ -246,3 +246,6 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
     .modal-overlay { padding: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .01ms !important; } }
+
+/* 一覧で押した訪問先 */
+.customer-item.list-selected, .route-stop.list-selected { background: #e3f0fb; box-shadow: inset 4px 0 0 #1f6fb2; }
