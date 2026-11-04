@@ -73,6 +73,7 @@ const VisitPlanner = (() => {
     function begin(customer) {
         byId('visitEditorName').textContent=customer.company||'訪問先';
         byId('visitEditorAddress').textContent=customer.address||'';
+        { const info=byId('visitCallInfo'); if(info){ const rows=[]; if(customer.contact)rows.push(`<p>👤 ${esc(customer.contact)}</p>`); if(customer.filter)rows.push(`<p>🔧 フィルター: ${esc(customer.filter)}</p>`); info.innerHTML=rows.join(''); info.hidden=!rows.length; } }
         byId('visitScheduleDay').value=(customer.appoDate||'').slice(0,10);
         byId('visitScheduleTime').value=(customer.appoDate||'').slice(11,16);
         selectedDay=byId('visitScheduleDay').value||dayKey(new Date()); month=selectedDay.slice(0,7);

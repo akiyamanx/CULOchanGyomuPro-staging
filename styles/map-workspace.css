@@ -101,3 +101,9 @@ body.map-focus .workflow-toast { z-index:14000; }
     .visit-heading-actions { width:100%; }
     .visit-heading-actions>.btn { width:100%; }
 }
+
+.visit-call-info { flex:1 1 128px;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#f6f9fc;font-size:14px;line-height:1.45;overflow-wrap:anywhere; }
+.visit-call-info[hidden] { display:none; }
+.visit-call-info p { margin:0; }
+#visitPhoneActions { flex:0 1 auto;max-width:100%; }
+#visitPhoneActions .visit-call { width:auto; }
