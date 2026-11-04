@@ -36,6 +36,23 @@ const GeocodeGuard = (() => {
             return KEY_RE.test(key) ? key : '';
         } catch (e) { return ''; }
     }
-    return Object.freeze({ create, borrowedMapsKey, NOTICE });
+    // 住所の言い換え候補（見つからないときに順に試す）。全角→半角、郵便番号・かっこ書き・建物名の後ろを外す
+    function addressVariants(address) {
+        const raw = String(address || '').trim();
+        if (!raw) return [];
+        const out = [];
+        const add = v => { v = v.replace(/\s+/g, ' ').trim(); if (v && !out.includes(v)) out.push(v); };
+        add(raw);
+        let n = raw.normalize('NFKC').replace(/[‐－―ー−]/g, m => m === 'ー' ? m : '-');
+        n = n.replace(/〒?\s*\d{3}-?\d{4}\s*/, ' ');
+        add(n);
+        n = n.split(/[\r\n]/)[0];
+        add(n.replace(/[(（][^)）]*[)）]/g, ' '));
+        // 番地(数字-数字…)の後ろの建物名・階数を外す
+        const m = n.match(/^(.*?\d+(?:-\d+){1,3})(?=\D|$)/);
+        if (m) add(m[1]);
+        return out;
+    }
+    return Object.freeze({ create, borrowedMapsKey, addressVariants, NOTICE });
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = GeocodeGuard;
