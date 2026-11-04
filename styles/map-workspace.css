@@ -143,3 +143,11 @@ body.map-focus .workflow-toast { z-index:14000; }
 .ic-map:disabled{opacity:.45;cursor:not-allowed}
 .ic-map-bar{position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:10001;display:flex;gap:8px;align-items:center;background:#1c2d3f;color:#e8edf2;border:2px solid #FFB300;border-radius:10px;padding:10px 12px;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.5)}
 .ic-map-bar button{margin-left:auto;min-height:36px;padding:6px 12px;border-radius:6px;border:1px solid #8fa3b8;background:#162230;color:#e8edf2}
+.seg-same .seg-same-note{margin-top:6px;font-size:13px;color:#b0bec5}
+.seg-detour{margin-top:6px;font-size:12px;line-height:1.5}
+.dist-result{white-space:normal;overflow:auto;flex:1;font-size:14px;line-height:1.55}
+.dist-result ol{margin:6px 0 0;padding-left:0;list-style:none}
+.dist-result li{padding:6px 0;border-top:1px solid rgba(255,255,255,.12)}
+.dist-result .dr-addr{display:block;font-size:12px;color:#b0bec5;word-break:break-all}
+.dist-result .dr-sub{display:block;font-size:12px;color:#ffe082}
+.dist-result .dr-warn{display:block;font-size:12px;color:#ffb74d}

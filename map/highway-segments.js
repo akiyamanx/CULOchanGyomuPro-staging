@@ -93,6 +93,21 @@
         return (list || []).map(toIc).filter(function (ic) { return ic.name.indexOf(q) >= 0 || (ic.roads || '').indexOf(q) >= 0; }).slice(0, limit || 12);
     }
 
+    // --- 同じ場所・遠回りのチェック ---
+    function addrKey(a) { return String(a || '').normalize('NFKC').replace(/[\s　]+/g, '').replace(/[‐－―−]/g, '-'); }
+    // 同じ住所（または50m以内）なら同じ場所。距離は0kmで道路の選択は使わない
+    function samePlace(a, b) {
+        if (a && b && a.address && addrKey(a.address) === addrKey(b.address)) return true;
+        if (a && b && isFinite(a.lat) && isFinite(b.lat) && a.lat !== null && b.lat !== null && a.lng !== null && b.lng !== null) return haversine(a, b) < 0.05;
+        return false;
+    }
+    // ICを通ると直線よりどれだけ遠回りか（直線距離ベース）。1.5倍以上かつ5km以上増えると遠回り
+    function detour(a, b, ic) {
+        if (!a || !b || !validIc(ic) || !isFinite(a.lat) || !isFinite(b.lat) || a.lat === null || b.lat === null) return null;
+        var direct = haversine(a, b), via = haversine(a, ic) + haversine(ic, b);
+        return { directKm: direct, viaKm: via, extraKm: via - direct, warn: via > Math.max(direct, 0.5) * 1.5 && via - direct > 5 };
+    }
+
     // --- よく使うIC ---
     function bumpFavorite(favs, ic, now) {
         var out = Object.assign({}, favs || {});
@@ -108,7 +123,7 @@
 
     var api = { TYPES: TYPES, NAMES: NAMES, ICONS: ICONS, normalize: normalize, toStored: toStored, isSplit: isSplit, nextType: nextType,
         planLegs: planLegs, compose: compose, breakdown: breakdown, label: label, haversine: haversine,
-        nearestIC: nearestIC, icsNearSegment: icsNearSegment, searchICs: searchICs, bumpFavorite: bumpFavorite, favoriteList: favoriteList };
+        nearestIC: nearestIC, samePlace: samePlace, detour: detour, icsNearSegment: icsNearSegment, searchICs: searchICs, bumpFavorite: bumpFavorite, favoriteList: favoriteList };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.HighwaySegments = api;
 })(typeof window !== 'undefined' ? window : this);

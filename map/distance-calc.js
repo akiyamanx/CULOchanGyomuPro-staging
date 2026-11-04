@@ -69,9 +69,11 @@ const DistanceCalc = (() => {
 
         // 全ポイントリスト: 会社 → 各顧客 → 会社
         const points = [];
-        points.push({ address: homeAddress, id: 'home_start' });
-        ordered.forEach(m => points.push({ address: m.address, id: m.id }));
-        points.push({ address: homeAddress, id: 'home_end' });
+        const gc = (DataStorage.getGeoCache && DataStorage.getGeoCache()) || {};
+        const pos = (addr, c) => { const g = gc[addr] || (c && c.lat && c.lng ? c : null); return g ? { lat: +g.lat, lng: +g.lng } : { lat: null, lng: null }; };
+        points.push({ address: homeAddress, id: 'home_start', ...pos(homeAddress) });
+        ordered.forEach(m => points.push({ address: m.address, id: m.id, ...pos(m.address, m) }));
+        points.push({ address: homeAddress, id: 'home_end', ...pos(homeAddress) });
 
         // 区間ごとに距離計算（途中から／途中まで高速はICで2つに分けて合計する）
         const HS = (typeof HighwaySegments !== 'undefined') ? HighwaySegments : null;
@@ -91,6 +93,13 @@ const DistanceCalc = (() => {
                 : [{ origin: from.address, destination: to.address, avoidHighways: choice.type === 'general', part: choice.type }];
             const segType = choice.type;
             const base = { from: from.address.substring(0, 20), to: to.address.substring(0, 20), type: segType };
+            // 同じ場所どうしは0km（道路の選択は使わない。途中から高速などで遠回りしない）
+            if (HS && HS.samePlace && HS.samePlace(from, to)) {
+                segments.push(Object.assign(base, { type: 'general', km: 0, generalKm: 0, highwayKm: 0, duration: '0分', sameAddress: true, ignoredChoice: segType !== 'general' ? segType : undefined }));
+                continue;
+            }
+            const dt = HS && HS.detour && choice.ic ? HS.detour(from, to, choice.ic) : null;
+            if (dt && dt.warn) base.detourWarn = `⚠️ ${choice.ic.name}を通ると遠回りです（直線で約${Math.round(dt.directKm)}km → 約${Math.round(dt.viaKm)}km）。ICの選び方を確認してください`;
             try {
                 const results = [];
                 for (const leg of legs) {
