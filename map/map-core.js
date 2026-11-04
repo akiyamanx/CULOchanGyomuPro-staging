@@ -221,6 +221,21 @@ const MapCore = (() => {
         return marker;
     }
 
+    // 吹き出しと情報カードで共通の詳細行(customer は文字列をエスケープ済みのコピー)
+    function detailLines(customer) {
+        let html = '';
+        if (customer.managementNo) html += `<p>🔖 ${customer.managementNo}</p>`;
+        html += `<p>📍 ${customer.address || ''}</p>`;
+        if (customer.phone) html += `<p>📞 ${customer.phone}</p>`;
+        if (customer.contact) html += `<p>👤 ${customer.contact}</p>`;
+        if (customer.floors && customer.floors.length > 0) html += `<p>🏢 ${customer.floors.join(', ')}</p>`;
+        if (customer.model) html += `<p>💧 ${customer.model}</p>`;
+        if (customer.branch) html += `<p>🏢 営業所: ${customer.branch}</p>`;
+        if (customer.equipType) html += `<p>⚙️ 型式: ${customer.equipType}</p>`;
+        if (customer.filter) html += `<p>🔧 フィルター: ${customer.filter}</p>`;
+        return html;
+    }
+
     function showInfoWindow(marker, customer) {
         const esc = ExpenseImport.escapeHtml;
         const statusText = { pending: '未アポ', appointed: 'アポ済み', completed: '完了' };
@@ -236,15 +251,7 @@ const MapCore = (() => {
         html += `<h3>${customer.company || '不明'}`;
         if (customer.unitCount > 1) html += ` <small>(${customer.unitCount}台)</small>`;
         html += `</h3>`;
-        if (customer.managementNo) html += `<p>🔖 ${customer.managementNo}</p>`;
-        html += `<p>📍 ${customer.address || ''}</p>`;
-        if (customer.phone) html += `<p>📞 ${customer.phone}</p>`;
-        if (customer.contact) html += `<p>👤 ${customer.contact}</p>`;
-        if (customer.floors && customer.floors.length > 0) html += `<p>🏢 ${customer.floors.join(', ')}</p>`;
-        if (customer.model) html += `<p>💧 ${customer.model}</p>`;
-        if (customer.branch) html += `<p>🏢 営業所: ${customer.branch}</p>`;
-        if (customer.equipType) html += `<p>⚙️ 型式: ${customer.equipType}</p>`;
-        if (customer.filter) html += `<p>🔧 フィルター: ${customer.filter}</p>`;
+        html += detailLines(customer);
         if (route) html += `<p>🗺️ ${esc(route.name)}</p>`;
         html += `<p>${statusText[customer.status] || statusText.pending}</p>`;
         if (customer.appoDate) {
@@ -387,7 +394,7 @@ const MapCore = (() => {
         if (!card) { card = document.createElement('div'); card.id = 'listPickCard'; card.className = 'list-pick-card'; card.setAttribute('role', 'status'); host.appendChild(card); }
         card.innerHTML = `<button type="button" class="list-pick-close" aria-label="閉じる" onclick="this.parentNode.remove()">×</button>`
             + `<div class="list-pick-title">${esc(customer.company || '')}</div>`
-            + (customer.address ? `<div>📍 ${esc(customer.address)}</div>` : '')
+            + (() => { const c = {...customer}; Object.keys(c).forEach(k => { if (typeof c[k] === 'string') c[k] = esc(c[k]); }); if (c.floors) c.floors = c.floors.map(esc); return detailLines(c); })()
             + (route ? `<div>🗺️ ${esc(route.name || '')}</div>` : '')
             + `<div>${esc(statusText[customer.status] || '')}</div>`
             + `<div class="list-pick-note">${why}</div>`
