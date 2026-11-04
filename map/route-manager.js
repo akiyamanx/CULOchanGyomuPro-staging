@@ -298,7 +298,8 @@ const RouteManager = (() => {
             if (DataStorage.getCurrentWorkspaceId() !== workspace) throw new Error('月が切り替わりました。選択中の月で計算し直してください');
             if (distanceSignature(routeId, date) !== signature) throw new Error('訪問先が変更されました。計算し直してください');
             route.distanceResults = route.distanceResults || {};
-            route.distanceResults[date] = { ...result, signature };
+            const { mapData, ...stored } = result; // 地図の道筋は保存しない（容量を使わない）
+            route.distanceResults[date] = { ...stored, signature };
             // 計算待ちの間に行われた他ルートの編集を上書きしない。
             const currentRoutes = DataStorage.getRoutes();
             const currentRoute = currentRoutes.find(item => item.id === routeId);
@@ -331,7 +332,10 @@ const RouteManager = (() => {
             if (s.detourWarn) html += `<span class="dr-warn">${esc(s.detourWarn)}</span>`;
             html += '</li>';
         });
-        return html + '</ol></div><div class="seg-actions"><button type="button" id="distCancel" class="seg-cancel">キャンセル</button><button type="button" id="distApply" class="seg-calc">精算書に反映</button></div>';
+        html += '</ol><div class="dr-map-head">🗺️ 確認用ルートマップ <span class="dr-legend"><i class="lg-g"></i>下道 <i class="lg-h"></i>高速 <i class="lg-w"></i>要確認</span></div>'
+            + '<div id="distMap" class="dr-map" aria-label="確認用ルートマップ"></div><div id="distMapNote" class="dr-map-note" hidden></div>'
+            + '<button type="button" id="distMapAll" class="dr-map-all">🗺️ ルート全体を表示</button>';
+        return html + '</div><div class="seg-actions"><button type="button" id="distCancel" class="seg-cancel">キャンセル</button><button type="button" id="distApply" class="seg-calc">精算書に反映</button></div>';
     }
     function showDistanceResult(name, result) {
         return new Promise(resolve => {
@@ -344,6 +348,19 @@ const RouteManager = (() => {
             const done = v => { ov.remove(); resolve(v); };
             ov.querySelector('#distCancel').onclick = () => done(false);
             ov.querySelector('#distApply').onclick = () => done(true);
+            const note = msg => { const n = ov.querySelector('#distMapNote'); n.textContent = msg; n.hidden = false; ov.querySelector('#distMap').hidden = true; ov.querySelector('#distMapAll').hidden = true; };
+            let ctl = null;
+            try {
+                if (typeof google === 'undefined' || !google.maps || !window.ResultMap || !result.mapData) throw new Error('no maps');
+                ctl = ResultMap.draw(ov.querySelector('#distMap'), result, google.maps);
+            } catch (e) { console.warn('確認用ルートマップを表示できません', e); note('⚠️ 地図を表示できませんでした。上の一覧で確認してください'); }
+            if (ctl) {
+                ov.querySelector('#distMapAll').onclick = () => { ctl.showAll(); mark(-1); };
+                const mark = i => ov.querySelectorAll('.dist-result li').forEach((li, k) => li.classList.toggle('dr-active', k === i));
+                ov.querySelectorAll('.dist-result li').forEach((li, i) => li.addEventListener('click', () => {
+                    if (ctl.focus(i)) { mark(i); ov.querySelector('#distMap').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+                }));
+            }
         });
     }
 
@@ -368,7 +385,7 @@ const RouteManager = (() => {
         updateRoutePanel, toggleRouteSection,
         drawRouteLines, exportPDF, updateSummary,
         calcDistance, getDistance, distanceSignature, buildDestinationText,
-        routeDateInfo, routeDateHtml, distanceResultHtml
+        routeDateInfo, routeDateHtml, distanceResultHtml, showDistanceResult
     };
 })();
 

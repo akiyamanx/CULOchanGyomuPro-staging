@@ -25,7 +25,9 @@ const DistanceCalc = (() => {
                         distanceText: leg.distance.text,
                         durationSec: leg.duration.value,
                         durationText: leg.duration.text,
-                        roadText: (leg.steps || []).map(step => step.instructions || '').join(' ')
+                        roadText: (leg.steps || []).map(step => step.instructions || '').join(' '),
+                        // 確認用ルートマップに使う道筋（追加の通信はしない。保存もしない）
+                        path: (result.routes[0].overview_path || []).map(p => ({ lat: +(+p.lat()).toFixed(5), lng: +(+p.lng()).toFixed(5) }))
                     });
                 } else {
                     reject(new Error('Directions API error: ' + status));
@@ -82,6 +84,7 @@ const DistanceCalc = (() => {
         let generalKm = 0;
         const segments = [];
         let calls = 0;
+        const mapData = [];
 
         for (let i = 0; i < points.length - 1; i++) {
             const from = points[i];
@@ -118,6 +121,8 @@ const DistanceCalc = (() => {
                     ic: choice.ic ? choice.ic.name : undefined
                 });
                 if (HS) seg.breakdown = HS.breakdown(Object.assign({ choice }, c));
+                mapData.push({ seg: segments.length, legs: results.map(x => ({ part: x.part, path: x.r.path || [] })),
+                    ic: choice.ic ? Object.assign({ name: choice.ic.name }, HS && HS.accessPoint ? HS.accessPoint(choice.ic) : { lat: choice.ic.lat, lng: choice.ic.lng }) : null });
                 const gd = HS && HS.generalDetour ? HS.generalDetour(from, to, choice, c.generalM) : null;
                 if (gd && gd.warn && !seg.detourWarn) seg.detourWarn = `⚠️ 下道部分が長すぎます（${choice.ic.name}まで直線で約${Math.round(gd.straightKm)}kmなのに下道${Math.round(gd.generalKm)}km）。ICの入口の位置がずれている可能性があります`;
                 segments.push(seg);
@@ -133,7 +138,8 @@ const DistanceCalc = (() => {
         if (segments.some(segment => segment.error)) {
             throw new Error('距離を計算できない区間があります。住所と道路設定を確認してください（精算書には反映していません）');
         }
-        return { totalKm, highwayKm, generalKm, segments };
+        segments.forEach((sg, i) => { const m = mapData.find(x => x.seg === i); if (m) m.warn = !!sg.detourWarn; });
+        return { totalKm, highwayKm, generalKm, segments, mapData };
     }
 
     // v2.2 - 待機関数
