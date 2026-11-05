@@ -19,6 +19,10 @@ const VisitPicker = (() => {
         const dates = (rowDates || []).filter(Boolean).sort();
         return dates.length ? dates[dates.length - 1] : today;
     }
-    return { groupForDay, defaultDay };
+    // 距離計算から精算書へ反映した訪問のうち、まだ「完了」でないもの
+    function notDone(ordered) {
+        return (ordered || []).filter(c => c && c.id && c.status !== 'completed');
+    }
+    return { groupForDay, defaultDay, notDone };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = VisitPicker;

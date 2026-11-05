@@ -18,3 +18,7 @@ test('作業日の初期値は明細の最後の日付（提出日ではない�
     assert.equal(VisitPicker.defaultDay(['2026-11-03','','2026-11-04'],'2026-11-10'),'2026-11-04');
     assert.equal(VisitPicker.defaultDay([],'2026-11-10'),'2026-11-10');
 });
+test('精算書へ反映した訪問のうち完了でないものだけを完了の候補にする',()=>{
+    const r=VisitPicker.notDone([{id:'a',status:'appointed'},{id:'b',status:'completed'},{id:'c'},null]);
+    assert.deepEqual(r.map(c=>c.id),['a','c']);
+});
