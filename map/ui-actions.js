@@ -156,6 +156,21 @@ function openMailWorkspace(wsId) {
     if (typeof selectWorkspace === 'function') selectWorkspace(wsId);
 }
 
+function showVisitToast(text) {
+    var el = document.getElementById('visitMoveToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'visitMoveToast';
+        el.className = 'workflow-toast';
+        el.setAttribute('role', 'status');
+        document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.hidden = false;
+    clearTimeout(showVisitToast._t);
+    showVisitToast._t = setTimeout(function() { el.hidden = true; }, 2500);
+}
+
 function selectWorkspace(wsId) {
     var currentId = DataStorage.getCurrentWorkspaceId();
     if (wsId === currentId) {
@@ -302,12 +317,21 @@ function saveEdit() {
     if (!(typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView())) {
         updates.routeId = document.getElementById('editRoute').value || null;
     }
-    var updated = DataStorage.updateCustomer(id, updates);
-    if (!updated) {
-        document.getElementById('visitEditError').textContent = '保存できませんでした。入力を残しています。保存容量と訪問先を確認してください。';
+    var result = DataStorage.saveCustomerWithAppoDate
+        ? DataStorage.saveCustomerWithAppoDate(id, updates)
+        : (function(){ var u = DataStorage.updateCustomer(id, updates); return u ? { ok: true, moved: false, customer: u } : { ok: false, reason: 'write_failed' }; })();
+    if (!result.ok) {
+        var err = document.getElementById('visitEditError');
+        err.textContent = result.reason === 'duplicate'
+            ? '同じ内容の訪問が、すでにその月にあります。日付を確認してください。'
+            : '保存できませんでした。入力を残しています。保存容量と訪問先を確認してください。';
         return;
     }
     if (typeof VisitPlanner !== 'undefined') VisitPlanner.saved();
+    if (result.moved) {
+        var lab = DataStorage.workspaceLabel ? DataStorage.workspaceLabel({ id: result.to }) : null;
+        showVisitToast((lab && lab.month) ? lab.month + 'に移しました' : 'その月に移しました');
+    }
     // v1.8追加: アポ日時があればGCalボタン表示
     if (appoDate) {
         var company = document.getElementById('editCompany').value.trim();
@@ -321,6 +345,7 @@ function saveEdit() {
     }
     MapCore.refreshAllMarkers();
     RouteManager.updateRoutePanel();
+    if (typeof updateCompactCount === 'function') updateCompactCount();
 }
 
 function deleteLocation() {

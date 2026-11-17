@@ -365,7 +365,47 @@ const DataStorage = (() => {
             const rolledBack = undoDestination();
             return fail('source_write_failed', { rolledBack, maybeDuplicated: !rolledBack });
         }
+        try { detachFromRoutes(from, id); } catch (e) { /* 訪問先の移動は済んでいる。ルート順の掃除に失敗しても残す */ }
         return { ok: true, id, from, to };
+    }
+
+    function detachFromRoutes(wsId, customerId) {
+        if (!wsId || !customerId) return false;
+        const raw = AppStorage.getItem('mm_routes_' + wsId);
+        if (raw === null) return false;
+        const routes = JSON.parse(raw);
+        if (!Array.isArray(routes)) return false;
+        let changed = false;
+        const next = routes.map(r => {
+            if (!r || !Array.isArray(r.order) || r.order.indexOf(customerId) < 0) return r;
+            changed = true;
+            return Object.assign({}, r, { order: r.order.filter(x => x !== customerId) });
+        });
+        if (changed) AppStorage.setItem('mm_routes_' + wsId, JSON.stringify(next));
+        return changed;
+    }
+
+    function monthOfAppoDate(value) {
+        const match = typeof value === 'string' && value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/);
+        if (!match) return '';
+        const month = match[1] + '-' + match[2];
+        return validWorkDate(value, month) ? month : '';
+    }
+
+    // アポ日の月と今の置き場が違う(または日程未定)なら、同じIDのままその月へ移す。同期は _ws の変更として伝わる。
+    function saveCustomerWithAppoDate(id, updates) {
+        const loc = locateCustomer(id);
+        if (!loc) return { ok: false, reason: 'not_found' };
+        const from = loc.ws;
+        const appoDate = updates && Object.prototype.hasOwnProperty.call(updates, 'appoDate') ? updates.appoDate : undefined;
+        const to = monthOfAppoDate(appoDate);
+        if (!from || !to || from === to) {
+            const updated = updateCustomer(id, updates || {});
+            return updated ? { ok: true, moved: false, customer: updated, id } : { ok: false, reason: 'write_failed' };
+        }
+        const moved = moveCustomerToWorkspace({ id, from, to, appoDate, updates: updates || {} });
+        if (!moved.ok) return moved;
+        return { ok: true, moved: true, from, to, id, customer: findCustomer(id) };
     }
 
     function addCustomer(customer) {
@@ -672,6 +712,7 @@ const DataStorage = (() => {
         renameWorkspace, getCurrentWorkspaceId, migrateIfNeeded,
         UNSCHEDULED_ID, UNSCHEDULED_NAME, isMonthWorkspaceId, isReservedWorkspaceId,
         ensureUnscheduledWorkspace, workspaceLabel, moveCustomerToWorkspace,
+        monthOfAppoDate, saveCustomerWithAppoDate,
         getCustomers, saveCustomers, getCustomersForWorkspace, saveCustomersForWorkspace,
         addCustomer, updateCustomer, deleteCustomer,
         hasVisitDate, isUndatedCombinedView, listUndatedVisits, getViewCustomers,
