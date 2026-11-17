@@ -178,6 +178,75 @@ const DataStorage = (() => {
         }
     }
 
+    // 訪問日(アポ日)があるか。空・不正は未定。
+    function hasVisitDate(c) {
+        return /^\d{4}-\d{2}-\d{2}/.test(String((c && c.appoDate) || ''));
+    }
+    function isUndatedCombinedView() {
+        return getCurrentWorkspaceId() === UNSCHEDULED_ID;
+    }
+    // 日程未定の置き場＋各月でアポ日が無く完了でもない訪問。読み取りだけ(保存しない)。
+    // 返す对象の workspaceId は表示用で、保存データには書かない。
+    const UNDATED_SUBTITLE = '日付が決まっていない訪問（全部の月）';
+    function listUndatedVisits() {
+        const out = [];
+        const seen = new Set();
+        const workspaces = getWorkspaces();
+        for (const ws of workspaces) {
+            if (!ws || !ws.id) continue;
+            let list;
+            try { list = getCustomersForWorkspace(ws.id); } catch (e) { continue; }
+            const unscheduled = ws.id === UNSCHEDULED_ID;
+            for (const c of Array.isArray(list) ? list : []) {
+                if (!c || !c.id || seen.has(c.id)) continue;
+                if (c.status === 'completed') continue;
+                if (!unscheduled && hasVisitDate(c)) continue;
+                seen.add(c.id);
+                out.push(Object.assign({}, c, { workspaceId: ws.id }));
+            }
+        }
+        out.sort((a, b) => {
+            const au = a.workspaceId === UNSCHEDULED_ID ? 0 : 1, bu = b.workspaceId === UNSCHEDULED_ID ? 0 : 1;
+            if (au !== bu) return au - bu;
+            if (a.workspaceId !== b.workspaceId) return a.workspaceId < b.workspaceId ? 1 : -1;
+            return String(a.company || '').localeCompare(String(b.company || ''), 'ja');
+        });
+        return out;
+    }
+    function getViewCustomers() {
+        return isUndatedCombinedView() ? listUndatedVisits() : getCustomers();
+    }
+    function locateCustomer(id) {
+        try {
+            const list = getCustomers();
+            if (list.some(c => c && c.id === id)) return { ws: getCurrentWorkspaceId(), customers: list, current: true };
+        } catch (e) { /* 現在の置き場が読めなければ他を探す */ }
+        const current = getCurrentWorkspaceId();
+        for (const w of getWorkspaces()) {
+            if (!w || !w.id || w.id === current) continue;
+            try {
+                const list = getCustomersForWorkspace(w.id);
+                if (list.some(c => c && c.id === id)) return { ws: w.id, customers: list, current: false };
+            } catch (e) { /* その月が読めなくても他は続ける */ }
+        }
+        return null;
+    }
+    function workspaceOfCustomer(id) {
+        const loc = locateCustomer(id);
+        return loc ? loc.ws : null;
+    }
+    function findCustomer(id) {
+        const loc = locateCustomer(id);
+        if (!loc) return null;
+        const c = loc.customers.find(x => x && x.id === id);
+        return c ? Object.assign({}, c, loc.ws ? { workspaceId: loc.ws } : {}) : null;
+    }
+    function workspaceTag(wsId) {
+        return workspaceLabel({ id: wsId }).year
+            ? workspaceLabel({ id: wsId }).year + workspaceLabel({ id: wsId }).month
+            : workspaceLabel({ id: wsId }).month;
+    }
+
     function saveCustomers(customers) {
         try {
             AppStorage.setItem(getKeys().customers, JSON.stringify(customers));
@@ -314,26 +383,38 @@ const DataStorage = (() => {
 
     // v2.0 - 顧客更新
     function updateCustomer(id, updates) {
-        const customers = getCustomers();
+        const loc = locateCustomer(id);
+        if (!loc) return null;
+        const customers = loc.customers;
         const idx = customers.findIndex(c => c.id === id);
-        if (idx !== -1) {
-            const prev = customers[idx];
-            customers[idx] = { ...prev, ...updates };
-            // 住所が変わったら古い位置を捨てる（新しい住所で取り直す）
-            if (typeof updates.address === 'string' && updates.address !== prev.address && !('lat' in updates)) {
-                customers[idx].lat = null; customers[idx].lng = null;
-            }
-            if (!saveCustomers(customers)) return null;
-            return customers[idx];
+        if (idx === -1) return null;
+        const prev = customers[idx];
+        const next = { ...prev, ...updates };
+        delete next.workspaceId;
+        // 住所が変わったら古い位置を捨てる（新しい住所で取り直す）
+        if (typeof updates.address === 'string' && updates.address !== prev.address && !('lat' in updates)) {
+            next.lat = null; next.lng = null;
         }
-        return null;
+        customers[idx] = next;
+        try {
+            if (loc.current) {
+                if (!saveCustomers(customers)) return null;
+            } else {
+                saveCustomersForWorkspace(loc.ws, customers);
+            }
+        } catch (e) { return null; }
+        return loc.ws ? Object.assign({}, next, { workspaceId: loc.ws }) : next;
     }
 
     // v2.0 - 顧客削除
     function deleteCustomer(id) {
-        let customers = getCustomers();
-        customers = customers.filter(c => c.id !== id);
-        saveCustomers(customers);
+        const loc = locateCustomer(id);
+        if (!loc) return;
+        const customers = loc.customers.filter(c => c.id !== id);
+        try {
+            if (loc.current) saveCustomers(customers);
+            else saveCustomersForWorkspace(loc.ws, customers);
+        } catch (e) { /* 削除できなければそのまま */ }
     }
 
     // --- ルートデータ ---
@@ -593,6 +674,8 @@ const DataStorage = (() => {
         ensureUnscheduledWorkspace, workspaceLabel, moveCustomerToWorkspace,
         getCustomers, saveCustomers, getCustomersForWorkspace, saveCustomersForWorkspace,
         addCustomer, updateCustomer, deleteCustomer,
+        hasVisitDate, isUndatedCombinedView, listUndatedVisits, getViewCustomers,
+        findCustomer, workspaceOfCustomer, workspaceTag, UNDATED_SUBTITLE,
         getRoutes, saveRoutes, DEFAULT_ROUTES, updateRouteOrder,
         getSegments, saveSegments,
         getGeoCache, setGeoCache,

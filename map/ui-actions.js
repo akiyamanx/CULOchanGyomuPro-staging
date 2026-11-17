@@ -77,7 +77,7 @@ function updateCompactCount() {
     var compactCount = document.getElementById('compactCount');
     if (!compactCount) return;
     try {
-        var customers = DataStorage.getCustomers();
+        var customers = DataStorage.getViewCustomers ? DataStorage.getViewCustomers() : DataStorage.getCustomers();
         compactCount.textContent = customers.length + '件';
     } catch (e) {
         compactCount.textContent = '0件';
@@ -104,15 +104,18 @@ function showWorkspaceMenu() {
             var isReserved = DataStorage.isReservedWorkspaceId(ws.id);
             var customers = 0;
             try {
-                var data = AppStorage.getItem('mm_customers_' + ws.id);
-                customers = data ? JSON.parse(data).length : 0;
+                if (isReserved && typeof DataStorage.listUndatedVisits === 'function') customers = DataStorage.listUndatedVisits().length;
+                else {
+                    var data = AppStorage.getItem('mm_customers_' + ws.id);
+                    customers = data ? JSON.parse(data).length : 0;
+                }
             } catch (e) {}
 
             html += '<div class="ws-menu-item ' + (isActive ? 'ws-active' : '') + '" onclick="selectWorkspace(' + ExpenseImport.escapeHtml(JSON.stringify(String(ws.id))) + ')">';
             html += '<div class="ws-menu-item-main">';
             html += '<span class="ws-menu-check">' + (isActive ? '✅' : '　') + '</span>';
             html += '<span class="ws-menu-name">' + ExpenseImport.escapeHtml(displayYear + displayMonth) + '</span>';
-            html += '<span class="ws-menu-sub">' + ExpenseImport.escapeHtml(isReserved ? '日付が決まっていない依頼' : ws.name) + '</span>';
+            html += '<span class="ws-menu-sub">' + ExpenseImport.escapeHtml(isReserved ? (DataStorage.UNDATED_SUBTITLE || '日付が決まっていない訪問（全部の月）') : ws.name) + '</span>';
             html += '</div>';
             html += '<span class="ws-menu-count">' + customers + '件</span>';
             if (!isActive && !isReserved) {
@@ -137,6 +140,20 @@ function showWorkspaceMenu() {
 
 function hideWorkspaceMenu() {
     document.getElementById('wsMenuOverlay').style.display = 'none';
+}
+
+// メールBOXの「登録先」から、その置き場の地図を開く
+function openMailWorkspace(wsId) {
+    if (typeof DataStorage === 'undefined' || !wsId) return;
+    if (wsId === DataStorage.UNSCHEDULED_ID) DataStorage.ensureUnscheduledWorkspace();
+    if (typeof MailBoxUI !== 'undefined' && MailBoxUI.close) MailBoxUI.close();
+    if (typeof AppCore !== 'undefined') AppCore.switchTab('map');
+    if (DataStorage.getCurrentWorkspaceId() === wsId) {
+        hideWorkspaceMenu();
+        if (typeof reloadAllUI === 'function') reloadAllUI();
+        return;
+    }
+    if (typeof selectWorkspace === 'function') selectWorkspace(wsId);
 }
 
 function selectWorkspace(wsId) {
@@ -272,17 +289,20 @@ function saveEdit() {
     if (!id) return;
     if (typeof VisitPlanner !== 'undefined' && !VisitPlanner.validate()) return;
     var appoDate = document.getElementById('editAppoDate').value || null;
-    var updated = DataStorage.updateCustomer(id, {
+    var updates = {
         company: document.getElementById('editCompany').value.trim(),
         address: document.getElementById('editAddress').value.trim(),
         phone: document.getElementById('editPhone').value.trim(),
         contact: document.getElementById('editContact').value.trim(),
         note: document.getElementById('editNote').value.trim(),
         status: document.getElementById('editStatus').value,
-        routeId: document.getElementById('editRoute').value || null,
         appoDate: appoDate,
         purpose: document.getElementById('editPurpose').value
-    });
+    };
+    if (!(typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView())) {
+        updates.routeId = document.getElementById('editRoute').value || null;
+    }
+    var updated = DataStorage.updateCustomer(id, updates);
     if (!updated) {
         document.getElementById('visitEditError').textContent = '保存できませんでした。入力を残しています。保存容量と訪問先を確認してください。';
         return;

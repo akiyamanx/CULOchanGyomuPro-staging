@@ -373,13 +373,17 @@ const MailBoxUI = (() => {
         if (!list.length) return h('p', { class: 'mailbox-empty' }, '自動登録した依頼書はまだありません。');
         return h('div', {}, h('p', { class: 'mailbox-hint' }, '判別できた依頼書は、自動で登録しました(チェックや反映の操作は要りません)。'), list.map(row => {
             const r = row.result || { workspaces: {}, duplicates: 0 };
-            const places = Object.entries(r.workspaces).map(([ws, n]) => `${wsText(ws)} ${n}件`);
+            const places = Object.entries(r.workspaces).map(([ws, n]) => h('button', { type: 'button', class: 'mailbox-ws-link', onclick: () => { if (typeof openMailWorkspace === 'function') openMailWorkspace(ws); } }, `${wsText(ws)} ${n}件`));
             const st = row.state === 'cancelled' ? '取り消し済み' : '登録済み';
             const info = row.state === 'registered' ? box.registeredStatus(row.id) : null;
             const missingWarn = info && info.total && info.present < info.total;
+            const destLine = places.length
+                ? h('p', {}, '登録先: ', ...places.flatMap((el, i) => i ? ['、', el] : [el]))
+                : h('p', {}, '新しく登録した訪問先はありません。', r.duplicates ? `(重複${r.duplicates}件は登録していません)` : '');
+            if (places.length && r.duplicates) destLine.append(`（重複${r.duplicates}件は登録していません）`);
             const card = h('article', { class: 'mailbox-card' },
                 h('div', { class: 'mailbox-card-head' }, starBtn(row), h('strong', {}, row.state === 'cancelled' ? '依頼書(取り消し済み)' : '依頼書が来ました'), chip(st, row.state === 'cancelled' ? '' : 'ok'), row.needsAttention && row.state === 'registered' ? chip('確認推奨', 'warn') : null),
-                h('p', {}, places.length ? `登録先: ${places.join('、')}` : '新しく登録した訪問先はありません。', r.duplicates ? `(重複${r.duplicates}件は登録していません)` : ''),
+                destLine,
                 row.needsAttention && row.state === 'registered' ? h('p', { class: 'mailbox-note' }, row.reason) : null,
                 row.origin === 'remote' ? h('p', { class: 'mailbox-note' }, 'もう1台の端末で登録した依頼書です。訪問先そのものはその端末に入っています(訪問先を揃えるには「送る/受け取る」を使ってください)。') : missingWarn ? h('p', { class: 'mailbox-note' }, `登録した訪問先のうち${info.total - info.present}件が見つかりません(バックアップの復元などで消えた可能性)。自動では登録し直しません。必要なら手で追加してください。`) : null,
                 meta(row));
