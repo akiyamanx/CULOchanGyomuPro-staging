@@ -224,6 +224,14 @@ const GmailDiagnosis = (() => {
         const controls = document.getElementById('controls'), prepare = document.getElementById('prepare');
         const go = document.getElementById('run'), senders = document.getElementById('senders');
         const attach = document.getElementById('attachment'), batch = document.getElementById('batch'), searchOnly = document.getElementById('searchOnly'), parseAttachments = document.getElementById('parseAttachments');
+        const singlePage = new URLSearchParams(location.search).get('singlePage') === '1';
+        if (singlePage) {
+            go.hidden = batch.hidden = true;
+            attach.closest('label').hidden = parseAttachments.closest('label').hidden = true;
+            batch.nextElementSibling.hidden = true;
+            searchOnly.textContent = '一覧100件を1回で確認';
+            document.getElementById('searchScope').textContent = '検索一覧を1回だけ取得します。メール本文や添付にはアクセスせず、登録・保存はしません。';
+        }
         const transport = GmailTransport.create();
         let configured = false;
         try { configured = transport.state().configured; } catch (_) { /* e.g. browser storage unavailable */ }
@@ -307,11 +315,11 @@ const GmailDiagnosis = (() => {
             go.disabled = batch.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = true;
             try {
                 const r = await runSearch({ transport, terms, signal:aborter.signal,
-                    makeSource:t => GmailSource.create({ transport:t }),
+                    makeSource:t => GmailSource.create(singlePage ? { transport:t, limits:{pageSize:100,maxPages:1} } : {transport:t}),
                     onProgress:t => { result.textContent = t; } });
                 const e = r.error;
                 result.textContent = [
-                    '検索だけの診断: ' + (r.ok ? '成功' : '途中で停止') + ' (' + (r.ms/1000).toFixed(1) + '秒)',
+                    (singlePage ? '一覧100件を1回で確認: ' : '検索だけの診断: ') + (r.ok ? '成功' : '途中で停止') + ' (' + (r.ms/1000).toFixed(1) + '秒)',
                     (r.ok ? '確認できたページ: ' : '応答を受け取ったページ: ') + r.pages + ' / 一覧: ' + r.matched + '件',
                     e ? '停止: ' + e.phase + ' [' + e.code + (e.status ? ' / HTTP ' + e.status : '') + ']' : '',
                     r.truncated ? '上限に達したため、全件の確認ではありません。' : '',
