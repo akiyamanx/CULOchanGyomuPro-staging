@@ -4,7 +4,7 @@ const GmailDiagnosis = (() => {
     const ALLOWED_CODES = new Set(['google_not_ready','not_configured','consent_denied','consent_timeout',
         'scope_missing','not_connected','auth_expired','forbidden','api_disabled','rate_limited',
         'server_error','not_found','http_error','timeout','aborted','bad_url','network','too_large',
-        'bad_response','bad_terms','no_senders','size_unknown','no_target_attachment','internal']);
+        'bad_response','parse_setup','pdf_tool_failed','ocr_tool_failed','too_many_pages','read_failed','unsupported_kind','bad_terms','no_senders','size_unknown','no_target_attachment','internal']);
     const STAGES = ['許可', 'メール検索', 'メール詳細', '添付取得'];
     const BATCH = Object.freeze({ maxMessages:12, maxTotalBytes:15 * 1024 * 1024, maxAttachmentsPerMail:4 });
     const count = n => Number.isSafeInteger(n) && n >= 0 ? n : 0;
@@ -58,10 +58,10 @@ const GmailDiagnosis = (() => {
             transport.disconnect();
         }
     }
-    async function runBatch({ transport, source, importer, terms, signal, onProgress, now = Date.now }) {
+    async function runBatch({ transport, source, importer, terms, signal, onProgress, prepareReader, preflight, now = Date.now }) {
         const started = now();
-        let firstError = null, remaining = BATCH.maxTotalBytes;
-        let downloaded = 0, checked = 0, scanned = 0, stoppedAtByteLimit = false;
+        let firstError = null, remaining = BATCH.maxTotalBytes, search = null, sampledList = null;
+        let downloaded = 0, checked = 0, scanned = 0, parsed = 0, parseFailed = 0, stoppedAtByteLimit = false;
         const track = (step, fn, after) => async (...args) => {
             try {
                 const value = await fn(...args);
@@ -74,7 +74,12 @@ const GmailDiagnosis = (() => {
         };
         const observed = {
             buildQuery: source.buildQuery,
-            listMessageIds: track(STAGES[1], source.listMessageIds, x => { scanned = x.ids.length; }),
+            listMessageIds: track(STAGES[1], opts => {
+                if (!sampledList) return source.listMessageIds(opts);
+                const sampled = sampledList;
+                sampledList = null;
+                return sampled;
+            }, x => { scanned = x.ids.length; }),
             getMessage: track(STAGES[2], source.getMessage, () => { checked++; }),
             async downloadAttachment(id, attachment, opts) {
                 if (remaining <= 0) {
@@ -98,17 +103,49 @@ const GmailDiagnosis = (() => {
             if (!firstError && !data.ok) firstError = { step:errorStep, ...safeError({ code:data.code }) };
             return { ok:data.ok, scanned, checked, downloaded, bytes:BATCH.maxTotalBytes - remaining,
                 failed:count(data.failedMails), truncated:!!data.truncated || stoppedAtByteLimit,
-                firstError, ms:Math.max(0, now()-started) };
+                firstError, search, parsed, parseFailed, parseSkipped:Math.max(0, downloaded - parsed - parseFailed), parsing:!!prepareReader, ms:Math.max(0, now()-started) };
         };
         try {
             onProgress?.('Googleの許可を待っています…');
             await track(STAGES[0], transport.connect)();
+            if (preflight) {
+                search = await preflight(found => {
+                    sampledList = { ids:found.ids.slice(0, BATCH.maxMessages),
+                        truncated:found.truncated || found.ids.length > BATCH.maxMessages };
+                });
+                if (!search.ok) {
+                    firstError = { step:search.error.phase, ...safeError(search.error) };
+                    return summary({ ok:false, code:firstError.code });
+                }
+            }
+            let reader = { readForMail:async () => ({ opened:true, items:[] }) };
+            if (prepareReader) {
+                onProgress?.('端末内の添付読取ツールを準備しています…');
+                let real;
+                try { real = await prepareReader(); }
+                catch (_) {
+                    if (!firstError) firstError = { step:'添付解析ツール', code:'parse_setup', status:0 };
+                    return summary({ ok:false, code:'parse_setup' });
+                }
+                reader = { async readForMail(...args) {
+                    let result;
+                    try { result = await real.readForMail(...args); }
+                    catch (error) { result = { opened:false, errorCode:safeError(error).code }; }
+                    if (result?.opened) parsed++;
+                    else {
+                        parseFailed++;
+                        if (!firstError) firstError = { step:'添付解析', ...safeError({ code:result?.errorCode || 'read_failed' }) };
+                    }
+                    // Do not keep parsed contents, filenames, rendered preview or source text in the batch.
+                    return { opened:!!result?.opened, items:[] };
+                } };
+            }
             const runner = importer.create({
                 source:observed, terms,
                 // These sinks never retain contents, invoke a parser, sync, or write any records.
                 mailBox:{ processedBases:() => [], ingest:() => ({ ok:true }), recordEvent:() => {} },
-                makeFile:() => null,
-                reader:{ readForMail:async () => ({ opened:true, items:[] }) },
+                ...(prepareReader ? {} : { makeFile:() => null }),
+                reader,
                 limits:BATCH
             });
             const data = await runner.run({ signal, onProgress:p => {
@@ -122,12 +159,71 @@ const GmailDiagnosis = (() => {
             transport.disconnect();
         }
     }
+    async function runSearch({ transport, makeSource, terms, signal, onProgress, connectedAlready = false, sample, now = Date.now }) {
+        const start = now();
+        const LIMIT = 100;
+        let phase = '許可', responses = 0, matched = 0;
+        const wrap = {
+            request(url, options, consume) {
+                const page = responses + 1;
+                phase = 'メール検索 ' + page + 'ページ目';
+                onProgress?.(phase + 'を確認しています…');
+                return transport.request(url, options, consume).then(data => {
+                    responses++;
+                    matched += Math.min(LIMIT - matched, count(data?.messages?.length));
+                    return data;
+                });
+            }
+        };
+        try {
+            if (!connectedAlready) {
+                onProgress?.('Googleの許可を待っています…');
+                await transport.connect();
+            }
+            phase = 'メール検索';
+            const source = makeSource(wrap);
+            const query = source.buildQuery({ terms, days:62 });
+            const found = await source.listMessageIds({ query, maxMessages:LIMIT, signal });
+            sample?.(found);
+            return { ok:true, pages:count(found.pages), matched:count(found.ids.length),
+                truncated:!!found.truncated, ms:Math.max(0, now()-start) };
+        } catch (error) {
+            return { ok:false, pages:responses, matched, error:{ phase, ...safeError(error) },
+                ms:Math.max(0, now()-start) };
+        } finally {
+            if (!connectedAlready) transport.disconnect();
+        }
+    }
+    let parserLoading;
+    function prepareParser() {
+        const load = src => new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            const timer = setTimeout(() => { script.remove(); reject(new Error('parse_setup')); }, 15000);
+            const settle = callback => { clearTimeout(timer); callback(); };
+            script.addEventListener('load', () => settle(resolve), { once:true });
+            script.addEventListener('error', () => settle(() => { script.remove(); reject(new Error('parse_setup')); }), { once:true });
+            script.src = src;
+            document.head.append(script);
+        });
+        if (!parserLoading) parserLoading = (async () => {
+            // Identical version and trusted URLs used by the app; no bytes are sent to these URLs.
+            await Promise.all([
+                load('../expense/expense-import.js?v=20261105-4'),
+                load('../map/request-parser.js?v=20261119-date-review-1'),
+                load('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js').catch(() => {})
+            ]);
+            await load('../map/request-reader.js?v=20261030-3');
+            if (typeof RequestReader === 'undefined') throw new Error('parse_setup');
+            return RequestReader;
+        })().catch(error => { parserLoading = null; throw error; });
+        return parserLoading;
+    }
     function init() {
         const result = document.getElementById('result');
         if (!AppProfile.staging) { result.textContent = 'この診断はお試し版でのみ使えます。'; return; }
         const controls = document.getElementById('controls'), prepare = document.getElementById('prepare');
         const go = document.getElementById('run'), senders = document.getElementById('senders');
-        const attach = document.getElementById('attachment'), batch = document.getElementById('batch');
+        const attach = document.getElementById('attachment'), batch = document.getElementById('batch'), searchOnly = document.getElementById('searchOnly'), parseAttachments = document.getElementById('parseAttachments');
         const transport = GmailTransport.create();
         let configured = false;
         try { configured = transport.state().configured; } catch (_) { /* e.g. browser storage unavailable */ }
@@ -143,7 +239,7 @@ const GmailDiagnosis = (() => {
             try {
                 await transport.prepare();
                 if (!window.google?.accounts?.oauth2) throw Object.assign(new Error('google_not_ready'), { code:'google_not_ready' });
-                go.disabled = false;
+                go.disabled = searchOnly.disabled = false;
                 batch.disabled = typeof GmailImport === 'undefined';
                 result.textContent = '準備できました。診断方法を選んでください。';
             } catch (err) {
@@ -160,7 +256,7 @@ const GmailDiagnosis = (() => {
                 senders.focus(); return;
             }
             aborter = new AbortController();
-            go.disabled = batch.disabled = senders.disabled = attach.disabled = true;
+            go.disabled = batch.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = true;
             result.textContent = 'Googleの許可を待っています…';
             const source = GmailSource.create({ transport, limits: { pageSize:50, maxPages:1, maxRetries:1 } });
             const render = rows => {
@@ -172,33 +268,63 @@ const GmailDiagnosis = (() => {
                 const rows = await run({ transport, source, terms, probeAttachment:attach.checked, report:render, signal:aborter.signal });
                 render(rows);
                 result.textContent += '\n\nこの結果の部分だけ、そのまま澪に教えてください。';
-            } finally { aborter = null; go.disabled = senders.disabled = attach.disabled = false; batch.disabled = typeof GmailImport === 'undefined'; }
+            } finally { aborter = null; go.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = false; batch.disabled = typeof GmailImport === 'undefined'; }
         };
         batch.onclick = async () => {
             let terms;
             try { terms = parseTerms(senders.value); }
             catch (_) { result.textContent = 'いつもの業務Proで登録している差出人の入力を確認してください。'; senders.focus(); return; }
             aborter = new AbortController();
-            go.disabled = batch.disabled = senders.disabled = attach.disabled = true;
+            go.disabled = batch.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = true;
             const source = GmailSource.create({ transport, limits:{ pageSize:50, maxPages:1, maxRetries:12 } });
             try {
+                const onProgress = s => { result.textContent = s; };
+                const optIn = parseAttachments.checked;
                 const r = await runBatch({ transport, source, importer:GmailImport, terms, signal:aborter.signal,
-                    onProgress:s => { result.textContent = s; } });
+                    prepareReader:optIn ? prepareParser : null, onProgress,
+                    preflight:optIn ? sample => runSearch({ transport, terms, signal:aborter.signal, connectedAlready:true, sample,
+                        makeSource:t => GmailSource.create({ transport:t }), onProgress }) : null });
                 const first = r.firstError;
                 result.textContent = [
-                    '複数診断: ' + (!r.ok ? '途中で停止' : r.failed || first ? '一部失敗・再試行あり' : '完了') + ' (' + (r.ms/1000).toFixed(1) + '秒)',
+                    '複数診断: ' + (!r.ok ? '途中で停止' : r.failed || r.parseFailed || first ? '一部失敗・再試行あり' : '完了') + ' (' + (r.ms/1000).toFixed(1) + '秒)',
+                    r.search ? '本番と同じ検索: ' + (r.search.ok ? '成功' : '失敗') + ' / ' + r.search.pages + 'ページ・' + r.search.matched + '件' : '',
                     '確認対象: ' + r.scanned + '通 / 詳細取得: ' + r.checked + '通 / 添付取得: ' + r.downloaded + '件',
                     '取得に失敗して見送ったメール: ' + r.failed + '通',
                     '添付取得量: ' + (r.bytes/(1024*1024)).toFixed(2) + ' MiB',
+                    r.parsing ? '添付解析: 開けた ' + r.parsed + '件 / 失敗 ' + r.parseFailed + '件 / 対象外 ' + r.parseSkipped + '件' : '添付解析: 省略',
                     first ? '最初のエラー: ' + first.step + ' [' + first.code + (first.status ? ' / HTTP ' + first.status : '') + ']' : 'エラーなし',
                     r.truncated ? '対象件数・取得量の上限に達したため、全件の確認ではありません。' : '',
-                    '解析・登録・保存はしていません。結果の部分だけ澪に教えてください。'
+                    '登録・同期・保存はしていません。結果の部分だけ澪に教えてください。'
                 ].filter(Boolean).join('\n');
-            } finally { aborter = null; go.disabled = batch.disabled = senders.disabled = attach.disabled = false; }
+            } finally { aborter = null; go.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = false; batch.disabled = typeof GmailImport === 'undefined'; }
+        };
+
+        searchOnly.onclick = async () => {
+            let terms;
+            try { terms = parseTerms(senders.value); }
+            catch (_) { result.textContent = 'いつもの業務Proで登録している差出人の入力を確認してください。'; senders.focus(); return; }
+            aborter = new AbortController();
+            go.disabled = batch.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = true;
+            try {
+                const r = await runSearch({ transport, terms, signal:aborter.signal,
+                    makeSource:t => GmailSource.create({ transport:t }),
+                    onProgress:t => { result.textContent = t; } });
+                const e = r.error;
+                result.textContent = [
+                    '検索だけの診断: ' + (r.ok ? '成功' : '途中で停止') + ' (' + (r.ms/1000).toFixed(1) + '秒)',
+                    (r.ok ? '確認できたページ: ' : '応答を受け取ったページ: ') + r.pages + ' / 一覧: ' + r.matched + '件',
+                    e ? '停止: ' + e.phase + ' [' + e.code + (e.status ? ' / HTTP ' + e.status : '') + ']' : '',
+                    r.truncated ? '上限に達したため、全件の確認ではありません。' : '',
+                    '個別メール・添付は取得せず、何も登録・保存していません。結果だけ澪に教えてください。'
+                ].filter(Boolean).join('\n');
+            } finally {
+                aborter = null; go.disabled = searchOnly.disabled = senders.disabled = attach.disabled = parseAttachments.disabled = false;
+                batch.disabled = typeof GmailImport === 'undefined';
+            }
         };
 
     }
-    return { run, runBatch, parseTerms, safeError, init, BATCH };
+    return { run, runBatch, runSearch, parseTerms, safeError, init, BATCH };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = GmailDiagnosis;
 else if (typeof document !== 'undefined') GmailDiagnosis.init();
