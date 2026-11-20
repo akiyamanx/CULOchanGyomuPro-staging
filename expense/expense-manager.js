@@ -10,7 +10,7 @@
 
 const ExpenseManager = (() => {
     let _rowCount = 0;
-    let _draftBusy = false, _draftRenderVersion = 0;
+    let _draftBusy = false, _draftRenderVersion = 0, _parkingBusy = false;
 
     // ==========================================
     // 初期化
@@ -274,21 +274,30 @@ const ExpenseManager = (() => {
         return { count, amount, skipped: records.length - count };
     }
 
-    // 再反映時は以前反映した分だけ差し引く。手入力分は残す。
-    function syncParking(period) {
-        if (!/^\d{4}-\d{2}(?:-\d{2})?$/.test(period || '')) throw new Error('反映する利用日または月を指定してください');
-        const items = ParkingManager.getItems();
+    // Preview and application use the same eligible records, independent of PDF photo selection.
+    function collectParking(period) {
+        if (!/^(?:\d{4}-(?:0[1-9]|1[0-2]))(?:-\d{2})?$/.test(period || '')
+            || (period.length === 10 && ExpenseImport.normalizeDate(period) !== period)) {
+            throw new Error('明細の上で、反映する月または利用日を選んでください。');
+        }
         const byDate = new Map();
-        let count = 0, invalid = 0;
-        for (const item of items) {
+        let count = 0, invalid = 0, amountTotal = 0;
+        for (const item of ParkingManager.getItems()) {
             const date = ExpenseImport.normalizeDate(item.date);
             const amount = Number(item.amount);
-            if (!date || !Number.isSafeInteger(amount) || amount < 0) { invalid++; continue; }
+            if (!date) { invalid++; continue; }
             if (!date.startsWith(period)) continue;
+            if (!Number.isSafeInteger(amount) || amount <= 0) { invalid++; continue; }
             if (!byDate.has(date)) byDate.set(date, {});
             byDate.get(date)[item.id] = amount;
-            count++;
+            count++; amountTotal += amount;
         }
+        return {byDate,count,invalid,amountTotal};
+    }
+
+    // 再反映時は以前反映した分だけ差し引く。手入力分は残す。
+    function syncParking(period) {
+        const {byDate,count,invalid,amountTotal} = collectParking(period);
         const existing = Array.from(document.querySelectorAll('#expenseRows .exp-row'));
         const dates = new Set([...byDate.keys(), ...existing.map(_rowDate).filter(date => date.startsWith(period))]);
         _assertUniqueDates(dates);
@@ -305,16 +314,42 @@ const ExpenseManager = (() => {
             row.dataset.parkingImports = JSON.stringify(next);
         }
         recalculate();
-        return { count, invalid };
+        return { count, invalid, amountTotal };
     }
 
-    function reflectParkingMonth() {
-        const month = (document.getElementById('expParkingMonth') || {}).value;
+    function parkingPeriod() {
+        return document.getElementById('parkingFilterDay')?.value || document.getElementById('parkingFilterMonth')?.value || '';
+    }
+    function parkingSummary(period, data) {
+        const photos = ParkingManager.getSelectedItems().length;
+        return period + '｜金額 ' + data.count + '件・' + data.amountTotal.toLocaleString() + '円｜PDF用の選択写真 ' + photos + '枚'
+            + (data.invalid ? '。日付または金額が未確認の ' + data.invalid + '件は対象外。' : '。');
+    }
+    function previewParkingReflection() {
+        const preview = document.getElementById('parkingReflectPreview'), button = document.getElementById('parkingReflectButton');
+        if (!preview || !button) return;
+        const period = parkingPeriod();
+        button.disabled = !period || _parkingBusy;
+        try { preview.textContent = parkingSummary(period, collectParking(period)); }
+        catch (error) { preview.textContent = error.message; }
+    }
+    async function reflectParkingMonth() {
+        if (_parkingBusy) return;
+        const period = parkingPeriod(), status = document.getElementById('parkingReflectStatus');
+        if (!period || !status) return;
+        _parkingBusy = true;
+        previewParkingReflection();
+        status.textContent = '駐車場の編集内容を保存しています…';
         try {
-            const result = syncParking(month);
-            alert(month + ' の駐車場明細 ' + result.count + '件を反映しました。'
-                + (result.invalid ? '\n日付・金額が未確認の明細が ' + result.invalid + '件あります。' : ''));
-        } catch (error) { alert(error.message); }
+            await ParkingManager.settled();
+            if (period !== parkingPeriod()) {
+                status.textContent = '対象期間が変わりました。確認してから、もう一度反映してください。';
+                return;
+            }
+            const result = syncParking(period);
+            status.textContent = '精算書に反映しました。' + parkingSummary(period, result);
+        } catch (error) { status.textContent = '反映できませんでした。' + error.message; }
+        finally { _parkingBusy = false; previewParkingReflection(); }
     }
 
     function applyRoute(date, totalKm, destination, options = {}) {
@@ -588,7 +623,7 @@ const ExpenseManager = (() => {
 
     return {
         init, addRow, deleteRow, onDistanceChange, recalculate, isBusy:()=>_draftBusy,
-        onRowDateChange, getOrCreateDateRow, applyEtcRecords, syncParking, reflectParkingMonth, applyRoute, applyEtcDay,
+        onRowDateChange, getOrCreateDateRow, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, applyRoute, applyEtcDay,
         getHeaderData, getRowsData, parseHighway, calcGasCost,
         saveDraft, loadDraft, deleteDraft, renderDraftList, previewDraftReceipts, clearAll,
         trimToCity: _trimToCity,

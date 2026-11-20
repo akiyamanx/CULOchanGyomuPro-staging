@@ -62,11 +62,11 @@ test('normal expense navigation restores the overview and section jumps only vis
 
 test('one copy of each existing parking field, with intake, records and both outputs in distinct sections', () => {
     const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
-    for (const id of ['parkingSection','parkingPhotoStatus','parkingItemList','parkingPageSize','expParkingMonth','routeImport','etcSection']) {
+    for (const id of ['parkingSection','parkingPhotoStatus','parkingItemList','parkingPageSize','parkingReflectButton','routeImport','etcSection']) {
         assert.equal([...html.matchAll(new RegExp('id="'+id+'"','g'))].length,1,id);
     }
     const at=token=>html.indexOf(token);
-    const order=['id="parkingSection"','id="parkingAddTitle"','id="parkingPhotoStatus"','id="parkingRecordsTitle"','id="parkingItemList"','id="parkingPrintTitle"','id="parkingPageSize"','id="parkingReflectTitle"','id="expParkingMonth"','id="expenseOverview"'];
+    const order=['id="parkingSection"','id="parkingAddTitle"','id="parkingPhotoStatus"','id="parkingRecordsTitle"','id="parkingItemList"','id="parkingPrintTitle"','id="parkingPageSize"','id="parkingReflectTitle"','id="parkingReflectButton"','id="expenseOverview"'];
     order.forEach((token,i)=>assert.ok(at(token)>=0 && (i===0||at(token)>at(order[i-1])),token));
 });
 

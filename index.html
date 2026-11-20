@@ -132,8 +132,8 @@
                 <section class="panel-card parking-step" aria-labelledby="parkingRecordsTitle">
                     <h3 class="section-title" id="parkingRecordsTitle"><span>2</span> 明細を確認・編集</h3>
                 <div class="parking-filter-grid">
-                    <label>表示・出力する月<input type="month" id="parkingFilterMonth" onchange="document.getElementById('parkingFilterDay').value='';ParkingManager.renderParkingList()"></label>
-                    <label>利用日で絞る（任意）<input type="date" id="parkingFilterDay" onchange="document.getElementById('parkingFilterMonth').value=this.value.slice(0,7);ParkingManager.renderParkingList()"></label>
+                    <label>表示・出力する月<input type="month" id="parkingFilterMonth" onchange="document.getElementById('parkingFilterDay').value='';document.getElementById('parkingReflectStatus').textContent='';ParkingManager.renderParkingList()"></label>
+                    <label>利用日で絞る（任意）<input type="date" id="parkingFilterDay" onchange="if(this.value)document.getElementById('parkingFilterMonth').value=this.value.slice(0,7);document.getElementById('parkingReflectStatus').textContent='';ParkingManager.renderParkingList()"></label>
                 </div>
                 <p class="parking-caption">月・日付が空欄なら全期間。日付不明の写真は、確認できるよう常に表示します。</p>
                 <div class="parking-actions"><button class="btn btn-secondary" onclick="ParkingManager.selectVisible(true)">表示中を全選択</button><button class="btn btn-secondary" onclick="ParkingManager.selectVisible(false)">表示中の選択を解除</button></div>
@@ -152,11 +152,31 @@
                 <section class="panel-card parking-step parking-output parking-reflect" aria-labelledby="parkingReflectTitle">
                     <p class="eyebrow">駐車場代の金額をまとめる</p>
                     <h3 class="section-title" id="parkingReflectTitle">精算書に金額を反映</h3>
-                <div class="parking-btn-row"><label for="expParkingMonth">精算書に反映する月</label><input class="exp-input" type="month" id="expParkingMonth"><button class="btn btn-save" onclick="ExpenseManager.reflectParkingMonth()">駐車場代を精算書に反映</button></div>
-                <p class="parking-caption">ここで選んだ月の日付・金額が入っている明細を反映します。写真なしや「PDFに載せる」を選んでいない明細も含みます。</p>
+                <p class="parking-caption">上で選んだ月または利用日を使います。写真なしやPDFに載せない領収書も、日付と金額が入っていれば反映します。</p>
+                <p id="parkingReflectPreview" class="parking-caption"></p>
+                <div class="parking-btn-row"><button id="parkingReflectButton" type="button" class="btn btn-save" onclick="ExpenseManager.reflectParkingMonth()">表示中の期間の駐車場代を反映</button></div>
+                <p id="parkingReflectStatus" class="parking-caption" role="status" aria-live="polite"></p>
                     <button class="btn btn-secondary parking-task-back" type="button" onclick="AppCore.switchTab('expense')">精算・PDFの全体へ戻る</button>
                 </section>
                 <details><summary>駐車場記録の管理</summary><button class="btn btn-danger-quiet" onclick="ParkingManager.clearAll()">すべての駐車場記録を削除</button></details>
+            <dialog id="parkingCompanyDialog" class="parking-dialog" aria-labelledby="parkingCompanyTitle">
+                <h3 id="parkingCompanyTitle">会社名を五十音で選ぶ</h3>
+                <p class="parking-caption">業務プロに登録した訪問先から、会社名の候補が自動で増えます。これは会社名だけの選択です。機種や作業内容は別に確認してください。</p>
+                <p id="parkingCompanyStatus" class="parking-caption" role="status"></p>
+                <div class="parking-field-grid">
+                    <label>五十音の行<select id="parkingCompanyLine" class="parking-input"></select></label>
+                    <label>会社名<select id="parkingCompanyName" class="parking-input"></select></label>
+                    <label id="parkingCompanyBranchLabel" hidden>支店・店舗<select id="parkingCompanyBranch" class="parking-input"></select></label>
+                </div>
+                <div class="parking-actions">
+                    <button id="parkingCompanyUse" class="btn btn-primary" type="button" disabled>この会社名を使う</button>
+                    <form method="dialog"><button class="btn btn-secondary" type="submit">閉じる</button></form>
+                </div>
+                <details><summary>以前の訪問先リストも使う</summary>
+                    <p class="parking-caption">「業務プロ_訪問先リスト.json」はこのブラウザの業務プロ内に保存されます。メールやサイトへは送りません。</p>
+                    <label>訪問先リストを選ぶ<input id="parkingCompanySeed" type="file" accept=".json,application/json"></label>
+                </details>
+            </dialog>
             </section>
             <div id="expenseOverview">
             <div class="screen-heading"><div><p class="eyebrow">STEP 02 · 経費の記録と精算</p><h2 id="expenseTitle" tabindex="-1">交通費を精算する</h2><p>駐車場の領収書やETCを取り込み、合計を確認してPDFにします。</p></div></div>
@@ -176,24 +196,6 @@
                 <details class="panel-card fold-card" id="routeImport"><summary><span>訪問ルート・走行距離</span><span class="summary-note">日付とルートを選択</span></summary><div class="fold-body" id="tabExpense"></div></details>
                 <div class="panel-card import-etc"><div><h4>高速道路の料金</h4><p class="section-desc">ETC利用照会のCSV・Excel（.xlsx）から利用日ごとに取り込みます。</p></div><label class="btn btn-secondary file-control">ETCファイルを選択（CSV・Excel）<input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onchange="ExpenseEtc.handleFile(event)" class="file-input"></label><a href="https://www.etc-meisai.jp/" target="_blank" rel="noopener" class="text-link">ETC利用照会を開く ↗</a></div>
             <details class="panel-card fold-card" id="etcSection"><summary><span>ETC PDF・寄り道</span><span class="summary-note">月まとめ取込 → 日別に確認</span></summary><div class="fold-body" id="etcWorkflow"></div></details>
-            <dialog id="parkingCompanyDialog" class="parking-dialog" aria-labelledby="parkingCompanyTitle">
-                <h3 id="parkingCompanyTitle">会社名を五十音で選ぶ</h3>
-                <p class="parking-caption">業務プロに登録した訪問先から、会社名の候補が自動で増えます。これは会社名だけの選択です。機種や作業内容は別に確認してください。</p>
-                <p id="parkingCompanyStatus" class="parking-caption" role="status"></p>
-                <div class="parking-field-grid">
-                    <label>五十音の行<select id="parkingCompanyLine" class="parking-input"></select></label>
-                    <label>会社名<select id="parkingCompanyName" class="parking-input"></select></label>
-                    <label id="parkingCompanyBranchLabel" hidden>支店・店舗<select id="parkingCompanyBranch" class="parking-input"></select></label>
-                </div>
-                <div class="parking-actions">
-                    <button id="parkingCompanyUse" class="btn btn-primary" type="button" disabled>この会社名を使う</button>
-                    <form method="dialog"><button class="btn btn-secondary" type="submit">閉じる</button></form>
-                </div>
-                <details><summary>以前の訪問先リストも使う</summary>
-                    <p class="parking-caption">「業務プロ_訪問先リスト.json」はこのブラウザの業務プロ内に保存されます。メールやサイトへは送りません。</p>
-                    <label>訪問先リストを選ぶ<input id="parkingCompanySeed" type="file" accept=".json,application/json"></label>
-                </details>
-            </dialog>
             </section>
             <h3 class="section-title expense-divider" id="expenseDetailsTitle" tabindex="-1"><span>2</span> 内容を確認・入力</h3>
             <section class="panel-card"><h4 class="card-title">提出先・行先</h4>
@@ -421,18 +423,18 @@
     <script src="expense/expense-draft-store.js?v=20261019-15"></script>
     <script src="expense/expense-draft-receipts.js?v=20261019-2"></script>
     <script src="expense/visit-picker.js?v=20261105-6"></script>
-    <script src="expense/expense-manager.js?v=20261105-5"></script>
+    <script src="expense/expense-manager.js?v=20261121-1"></script>
     <script src="expense/expense-pdf.js?v=20261019-7"></script>
     <script src="expense/expense-etc.js?v=20261105-4"></script>
     <!-- v1.3追加 - Phase I: 駐車場明細IndexedDB管理 -->
     <script src="expense/parking-idb.js?v=20261019-15"></script>
     <script src="expense/parking-document.js?v=20261014-3"></script>
     <script src="expense/visit-name-directory.js?v=20261120-1"></script>
-    <script src="expense/parking-manager.js?v=20261120-2"></script>
+    <script src="expense/parking-manager.js?v=20261121-1"></script>
     <script src="expense/parking-scan-geometry.js?v=20261120-2"></script>
     <script src="expense/receipt-crop.js?v=20261120-3"></script>
     <script src="expense/receipt-crop-editor.js?v=20261120-3"></script>
-    <script src="expense/parking-scan.js?v=20261120-2"></script>
+    <script src="expense/parking-scan.js?v=20261121-1"></script>
     <script src="expense/parking-pdf.js?v=20261019-7"></script>
     <script src="map/map-data-storage.js?v=20261117-2"></script>
     <script src="map/v1-converter.js"></script>
@@ -462,8 +464,8 @@
     <script src="map/map-workspace.js?v=20261019-11"></script>
     <script src="map/route-list-pdf.js"></script>
     <script src="map/result-map.js?v=20261105-3"></script>
-    <script src="map/route-manager.js?v=20261117-1"></script>
-    <script src="map/map-expense-form.js"></script>
+    <script src="map/route-manager.js?v=20261121-1"></script>
+    <script src="map/map-expense-form.js?v=20261121-1"></script>
     <script src="map/route-order.js?v=20261104-1"></script>
     <script src="map/ic-kanto.js?v=20261104-1"></script>
     <script src="map/highway-segments.js?v=20261105-2"></script>
@@ -506,7 +508,6 @@
             catch (error) { document.getElementById('storageStartup').textContent = '保存データの確認・復旧を完了できません。ほかのタブを閉じて再読み込みしてください。 ' + error.message; return; }
             document.dispatchEvent(new Event('app:storage-ready'));
             ExpenseManager.init();
-            document.getElementById('expParkingMonth').value = new Date().toLocaleDateString('sv-SE').slice(0, 7);
             document.getElementById('parkingFilterMonth').value = new Date().toLocaleDateString('sv-SE').slice(0,7);
             await ParkingManager.init();
             if (AppProfile.staging) document.getElementById('parkingScanSample').hidden = false;

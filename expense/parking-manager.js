@@ -76,13 +76,24 @@ const ParkingManager = (() => {
         return serial(async()=>{
             const key=records[0]?.sourcePageKey;
             if(!key||records.length>6||records.some(r=>r.sourcePageKey!==key))return -2;
-            if(items.some(r=>r.sourcePageKey===key))return 0;
+            const stored=items.filter(r=>r.sourcePageKey===key);
+            const valid=r=>typeof ParkingScan!=='undefined'&&ParkingScan.validGeometry(r);
+            if(stored.length&&stored.some(r=>!valid(r)))return stored.every(r=>!valid(r))&&records.every(r=>stored.some(old=>old.sourceHash===r.sourceHash&&old.originalImageDataUrl===r.imageDataUrl))?0:-2;
+            const first=stored[0]||records[0], modern=valid(first);
+            if(records.concat(stored).some(r=>modern
+                ? !valid(r)||r.scanLayout!==first.scanLayout||r.scanAngle!==first.scanAngle
+                : valid(r)))return -2;
             const existing=new Set(items.map(r=>r.originalImageDataUrl||r.imageDataUrl).filter(Boolean));
+            const batch=[];
             for(const r of records){
-                if(!r.imageDataUrl||existing.has(r.imageDataUrl))return -2;
+                const same=stored.find(old=>old.sourceHash===r.sourceHash);
+                if(same){if((same.originalImageDataUrl||same.imageDataUrl)!==r.imageDataUrl)return -2;continue;}
+                if(!r.imageDataUrl||existing.has(r.imageDataUrl)||batch.some(old=>old.sourceHash===r.sourceHash))return -2;
+                if(modern&&stored.concat(batch).some(old=>ReceiptCrop.overlapRatio(old.scanQuad,r.scanQuad)>.15))return -2;
                 existing.add(r.imageDataUrl);
+                batch.push({...blank(),...r});
             }
-            const batch=records.map(r=>({...blank(),...r}));
+            if(!batch.length)return 0;
             if(!await save(items.concat(batch)))return -1;
             renderParkingList();
             return batch.length;
@@ -191,6 +202,7 @@ const ParkingManager = (() => {
         if (typeof ExpenseDraftReceipts !== 'undefined') ExpenseDraftReceipts.updateHint();
         const counter = document.getElementById('parkingPdfCount');
         if (counter) counter.textContent = getSelectedItems().length + '枚をPDFに出力';
+        if (typeof ExpenseManager !== 'undefined') ExpenseManager.previewParkingReflection?.();
     }
     function getSelectedItems() {
         // 日付不明を黙って除外せず、PDFの入力チェックへ渡す。
