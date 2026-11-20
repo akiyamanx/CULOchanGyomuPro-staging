@@ -120,6 +120,24 @@
                 <details class="panel-card fold-card" id="routeImport"><summary><span>訪問ルート・走行距離</span><span class="summary-note">日付とルートを選択</span></summary><div class="fold-body" id="tabExpense"></div></details>
                 <div class="panel-card import-etc"><div><h4>高速道路の料金</h4><p class="section-desc">ETC利用照会のCSV・Excel（.xlsx）から利用日ごとに取り込みます。</p></div><label class="btn btn-secondary file-control">ETCファイルを選択（CSV・Excel）<input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onchange="ExpenseEtc.handleFile(event)" class="file-input"></label><a href="https://www.etc-meisai.jp/" target="_blank" rel="noopener" class="text-link">ETC利用照会を開く ↗</a></div>
             <details class="panel-card fold-card" id="etcSection"><summary><span>ETC PDF・寄り道</span><span class="summary-note">月まとめ取込 → 日別に確認</span></summary><div class="fold-body" id="etcWorkflow"></div></details>
+            <dialog id="parkingCompanyDialog" class="parking-dialog" aria-labelledby="parkingCompanyTitle">
+                <h3 id="parkingCompanyTitle">会社名を五十音で選ぶ</h3>
+                <p class="parking-caption">業務プロに登録した訪問先から、会社名の候補が自動で増えます。これは会社名だけの選択です。機種や作業内容は別に確認してください。</p>
+                <p id="parkingCompanyStatus" class="parking-caption" role="status"></p>
+                <div class="parking-field-grid">
+                    <label>五十音の行<select id="parkingCompanyLine" class="parking-input"></select></label>
+                    <label>会社名<select id="parkingCompanyName" class="parking-input"></select></label>
+                    <label id="parkingCompanyBranchLabel" hidden>支店・店舗<select id="parkingCompanyBranch" class="parking-input"></select></label>
+                </div>
+                <div class="parking-actions">
+                    <button id="parkingCompanyUse" class="btn btn-primary" type="button" disabled>この会社名を使う</button>
+                    <form method="dialog"><button class="btn btn-secondary" type="submit">閉じる</button></form>
+                </div>
+                <details><summary>以前の訪問先リストも使う</summary>
+                    <p class="parking-caption">「業務プロ_訪問先リスト.json」はこのブラウザの業務プロ内に保存されます。メールやサイトへは送りません。</p>
+                    <label>訪問先リストを選ぶ<input id="parkingCompanySeed" type="file" accept=".json,application/json"></label>
+                </details>
+            </dialog>
             <details class="panel-card parking-section fold-card" id="parkingSection">
                 <summary><span>駐車場代を取り込む・記録する</span><span class="summary-note">レシート・手入力</span></summary><div class="fold-body">
                 <p class="card-desc">写真を追加 → 写真を整える → 訪問先を確認 → 提出用PDF。追加した写真は端末に保存されます。</p>
@@ -378,7 +396,8 @@
     <!-- v1.3追加 - Phase I: 駐車場明細IndexedDB管理 -->
     <script src="expense/parking-idb.js?v=20261019-15"></script>
     <script src="expense/parking-document.js?v=20261014-3"></script>
-    <script src="expense/parking-manager.js?v=20261019-15"></script>
+    <script src="expense/visit-name-directory.js?v=20261120-1"></script>
+    <script src="expense/parking-manager.js?v=20261120-1"></script>
     <script src="expense/parking-pdf.js?v=20261019-7"></script>
     <script src="map/map-data-storage.js?v=20261117-2"></script>
     <script src="map/v1-converter.js"></script>
@@ -499,5 +518,6 @@
     </script>
 </body>
 </html>
+
 
 

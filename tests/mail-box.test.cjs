@@ -518,3 +518,30 @@ test('曜日不一致の依頼だけ自動登録せず、手動反映しても�
     assert.equal(held.appoDate,'');
     assert.equal(held.dateNeedsReview,true);
 });
+
+
+test('会社名候補は依頼の登録後だけ増え、表記違いや別月の依頼では増えない',()=>{
+    const {mb,run,json,store,hooks}=setup(legacy());
+    run(fs.readFileSync(require.resolve('../expense/visit-name-directory.js'),'utf8'));
+    const names=()=>json('VisitNameDirectory.read(DataStorage,[]).rows.map(r=>r.name)');
+    const before=names();
+    const make=(id,kind,record)=>mail(id,[att('a1','業務依頼書.xlsx',kind,[record])]);
+    mb.ingest([make('unknown-name','xlsx',partial({company:'未確定テスト株式会社'}))]);
+    assert.deepEqual(names(),before);
+    hooks.failKey='mm_customers_unscheduled';
+    mb.ingest([make('failed-name','xlsx',full({company:'保存失敗テスト株式会社'}))]);
+    assert.deepEqual(names(),before);
+    hooks.failKey=null;
+    const first=make('new-name','xlsx',full({company:'株式会社ワカバテスト'}));
+    assert.equal(mb.ingest([first]).registered,1);
+    const count=allCustomers(store).length;
+    assert.equal(names().length,before.length+1);
+    const second=make('another-month','xlsx',full({
+        company:'ワカバテスト（株）',workDateText:'2026年11月5日',appoDate:'2026-11-05T10:00'
+    }));
+    assert.equal(mb.ingest([second]).registered,1);
+    mb.ingest([first,second]);
+    assert.equal(allCustomers(store).length,count+1);
+    assert.equal(names().filter(x=>x.includes('ワカバテスト')).length,1);
+    assert.equal(BackupFormat.allowedKey('gyomupro_visit_names_seed'),false);
+});

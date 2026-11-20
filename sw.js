@@ -12,7 +12,7 @@
 // 本番とお試し版(/CULOchanGyomuPro-staging/)は同じオリジンでCache Storageを共有するため、名前で分ける
 const IS_STAGING = /^\/CULOchanGyomuPro-staging\//.test((self.location && self.location.pathname) || '');
 const CACHE_PREFIX = IS_STAGING ? 'gyomupro-stg-' : 'gyomupro-';
-const CACHE_NAME = CACHE_PREFIX + (IS_STAGING ? 'v84' : 'v82');
+const CACHE_NAME = CACHE_PREFIX + (IS_STAGING ? 'v85-visit-names' : 'v82');
 // 自分(本番/お試し版)のキャッシュだけを古い版の掃除対象にする。相手側のキャッシュは消さない
 function ownCache(name) {
     if (IS_STAGING) return name.startsWith('gyomupro-stg-');
@@ -58,6 +58,7 @@ const ASSETS = [
     './expense/parking-idb.js',
     './expense/parking-document.js',
     './expense/parking-manager.js',
+    './expense/visit-name-directory.js',
     './expense/parking-pdf.js',
     './map/map-data-storage.js',
     './map/v1-converter.js',
@@ -185,3 +186,4 @@ self.addEventListener('fetch', event => {
             })
     );
 });
+
