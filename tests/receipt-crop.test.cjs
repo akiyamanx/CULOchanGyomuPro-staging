@@ -54,4 +54,39 @@ test('editor accepts two touches, then drags only the intended corner',()=>{
  canvas.onpointerdown(event(3,point.x,point.y));canvas.onpointermove(event(3,point.x+14,point.y-8));canvas.onpointerup(event(3,point.x+14,point.y-8));
  nodes.cropApply.onclick();
  a.ok(saved[0].x>square[0].x&&saved[0].y<square[0].y);a.deepEqual(saved.slice(1),square.slice(1));
+
+ ctx.editor.open({source:{width:400,height:400},initial:saved,quad:saved,invoker:{isConnected:false},label:'test',onApply:q=>saved=q});
+ nodes.cropFit.onclick();while(callbacks.length)callbacks.shift()();
+ const before=saved, [left,right]=points.slice(-4,-2),mx=(left.x+right.x)/2,my=(left.y+right.y)/2;
+ canvas.onpointerdown(event(4,mx,my));
+ canvas.onpointermove(event(4,mx+24,my+18));canvas.onpointerup(event(4,mx+24,my+18));nodes.cropApply.onclick();
+ for(const i of [0,1]){near(saved[i].x,before[i].x);near(saved[i].y-before[i].y,18/288);}
+ a.deepEqual(saved.slice(2),before.slice(2));
+
+});
+test('edge shifts both endpoints on the correct axis and keeps any existing tilt',()=>{
+ const tilted=c.moveCorner(square,0,{x:.08,y:.16});
+ const top=c.moveEdge(tilted,0,.12);
+ for(const i of [0,1]){ near(top[i].x,tilted[i].x); near(top[i].y-tilted[i].y,.12); }
+ a.deepEqual(top.slice(2),tilted.slice(2));
+ const right=c.moveEdge(tilted,1,-.18);
+ for(const i of [1,2]){ near(right[i].x-tilted[i].x,-.18); near(right[i].y,tilted[i].y); }
+ a.equal(right[0],tilted[0]);a.equal(right[3],tilted[3]);
+ const bottom=c.moveEdge(square,2,.03),left=c.moveEdge(square,3,-.03);
+ near(bottom[2].y-square[2].y,.03);near(bottom[3].y-square[3].y,.03);
+ near(left[0].x-square[0].x,-.03);near(left[3].x-square[3].x,-.03);
+});
+test('edge clamps at page bounds and never crosses the opposite side',()=>{
+ const expanded=c.moveEdge(square,3,-5);near(expanded[0].x,0);near(expanded[3].x,0);
+ const squeezed=c.moveEdge(square,0,5);a.ok(squeezed[0].y<square[3].y&&squeezed[0].y>square[0].y);
+ a.ok(Number.isFinite(c.project(squeezed)(.5,.5).y));
+});
+test('hit testing keeps corners independent and recognizes the lines',()=>{
+ const pts=square.map(p=>({x:p.x*300,y:p.y*300}));
+ a.deepEqual(c.pickHandle(pts,{x:110,y:65}),{type:'edge',index:0});
+ a.deepEqual(c.pickHandle(pts,{x:213,y:130}),{type:'edge',index:1});
+ a.deepEqual(c.pickHandle(pts,{x:37,y:65}),{type:'corner',index:0});
+ a.equal(c.pickHandle(pts,{x:150,y:150}),null);
+ const narrow=c.fromBox({x:20,y:20,w:30,h:200});
+ a.deepEqual(c.pickHandle(narrow,{x:35,y:20}),{type:'edge',index:0});
 });

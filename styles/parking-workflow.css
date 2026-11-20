@@ -53,6 +53,7 @@
 #cropSurface:active{cursor:grabbing}
 .crop-tools,.crop-confirm{margin:8px 0}
 .crop-tools .btn{padding-inline:10px}
+#cropEditor .crop-tools .btn,#cropEditor .crop-confirm .btn{width:auto;flex:0 1 auto}
+#cropEditor .crop-confirm .btn-primary{flex:1 1 auto}
 #cropZoomStatus{min-width:3.5ch;text-align:center;font-variant-numeric:tabular-nums}
-.crop-confirm .btn-primary{flex:1}
 #cropCornerKeys,#parkingScanSample{margin-top:6px}

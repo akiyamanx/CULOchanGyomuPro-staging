@@ -11,9 +11,45 @@
     const xs=q.map(p=>p.x),ys=q.map(p=>p.y);
     return {x:Math.min(...xs),y:Math.min(...ys),r:Math.max(...xs),b:Math.max(...ys)};
   }
+  const valid=q=>q.every((a,j)=>cross(a,q[(j+1)%4],q[(j+2)%4])>1e-5)&&area(q)>.00015;
   function moveCorner(quad,i,p){
     const q=quad.slice();q[i]={x:clamp(p.x,0,1),y:clamp(p.y,0,1)};
-    return q.every((a,j)=>cross(a,q[(j+1)%4],q[(j+2)%4])>1e-5)&&area(q)>.00015?q:quad;
+    return valid(q)?q:quad;
+  }
+  // Top/bottom use the vertical axis, left/right the horizontal axis. Both
+  // endpoints move by the same amount, so a perspective-adjusted edge keeps its angle.
+  function moveEdge(quad,i,delta){
+    if(!Number.isInteger(i)||i<0||i>3||!Number.isFinite(delta))return quad;
+    const j=(i+1)%4, axis=i%2===0?'y':'x';
+    const a=quad[i][axis],b=quad[j][axis];
+    const d=clamp(delta,-Math.min(a,b),1-Math.max(a,b));
+    if(!d)return quad;
+    const candidate=t=>quad.map((p,k)=>k===i||k===j?{...p,[axis]:clamp(p[axis]+d*t,0,1)}:p);
+    let q=candidate(1);
+    if(valid(q))return q;
+    let lo=0,hi=1;
+    for(let n=0;n<20;n++){
+      const mid=(lo+hi)/2;
+      if(valid(candidate(mid)))lo=mid;else hi=mid;
+    }
+    return lo>0?candidate(lo):quad;
+  }
+  function pickHandle(pts,p){
+    const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+    const distances=pts.map(q=>dist(q,p)),corner=distances.indexOf(Math.min(...distances));
+    let centerIndex=-1,centerDist=Infinity,edgeIndex=-1,edgeDist=Infinity;
+    for(let i=0;i<4;i++){
+      const a=pts[i],b=pts[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y;
+      const center=dist({x:(a.x+b.x)/2,y:(a.y+b.y)/2},p);
+      if(center<centerDist){centerDist=center;centerIndex=i;}
+      const t=((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy);
+      if(t<=0||t>=1||!Number.isFinite(t))continue;
+      const d=dist({x:a.x+t*dx,y:a.y+t*dy},p);
+      if(d<edgeDist){edgeDist=d;edgeIndex=i;}
+    }
+    if(centerDist<=18&&centerDist<distances[corner])return {type:'edge',index:centerIndex};
+    if(distances[corner]<=26)return {type:'corner',index:corner};
+    return edgeDist<=16?{type:'edge',index:edgeIndex}:null;
   }
   function overlapRatio(a,b){
     let q=a;
@@ -78,5 +114,5 @@
     const z=clamp(v.z*factor,1,10),p=toSource(v,from);
     return limit({...v,z,x:to.x-p.x*v.w*z,y:to.y-p.y*v.h*z},w,h);
   }
-  return {fromBox,bounds,moveCorner,overlapRatio,project,raster,image,toSource,zoomView};
+  return {fromBox,bounds,moveCorner,moveEdge,pickHandle,overlapRatio,project,raster,image,toSource,zoomView};
 });

@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="styles/expense.css?v=20261019-3">
     <!-- v2.0追加 - 駐車場利用明細スタイル -->
     <link rel="stylesheet" href="styles/parking.css">
-    <link rel="stylesheet" href="styles/parking-workflow.css?v=20261120-2">
+    <link rel="stylesheet" href="styles/parking-workflow.css?v=20261120-3">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600&display=swap">
     <link rel="stylesheet" href="styles/map/map-styles.css">
     <link rel="stylesheet" href="styles/map/map-expense-styles.css">
@@ -401,8 +401,8 @@
     <script src="expense/visit-name-directory.js?v=20261120-1"></script>
     <script src="expense/parking-manager.js?v=20261120-2"></script>
     <script src="expense/parking-scan-geometry.js?v=20261120-2"></script>
-    <script src="expense/receipt-crop.js?v=20261120-2"></script>
-    <script src="expense/receipt-crop-editor.js?v=20261120-2"></script>
+    <script src="expense/receipt-crop.js?v=20261120-3"></script>
+    <script src="expense/receipt-crop-editor.js?v=20261120-3"></script>
     <script src="expense/parking-scan.js?v=20261120-2"></script>
     <script src="expense/parking-pdf.js?v=20261019-7"></script>
     <script src="map/map-data-storage.js?v=20261117-2"></script>
@@ -534,7 +534,7 @@
 <div class="parking-actions scan-footer"><button id="parkingScanSave" class="btn btn-primary" type="button">選んだ領収書を追加</button><button id="parkingScanClose" class="btn btn-secondary" type="button">閉じて明細へ</button></div></div>
 <section id="cropEditor" aria-labelledby="cropTitle" hidden>
 <h2 id="cropTitle" tabindex="-1">切り取り範囲</h2>
-<p id="cropHint" class="parking-caption">四隅の黄色い点を指で動かして、領収書の端に合わせます。２本指で拡大・縮小、点の外をドラッグすると画像が移動します。</p>
+<p id="cropHint" class="parking-caption">四隅の丸は自由に動かせます。線の中央の黄色い目印をつかむと、上・下の線は上下、左・右の線は左右に動きます。２本指で拡大・縮小できます。</p>
 <canvas id="cropSurface" aria-label="切り取り範囲のプレビュー" aria-describedby="cropHint"></canvas>
 <div class="parking-actions crop-tools">
 <button class="btn btn-secondary" id="cropMinus" type="button" aria-label="縮小">−</button><span id="cropZoomStatus"></span><button class="btn btn-secondary" id="cropPlus" type="button" aria-label="拡大">＋</button>
