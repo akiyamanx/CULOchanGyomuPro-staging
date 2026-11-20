@@ -69,3 +69,27 @@ test('one copy of each existing parking field, with intake, records and both out
     const order=['id="parkingSection"','id="parkingAddTitle"','id="parkingPhotoStatus"','id="parkingRecordsTitle"','id="parkingItemList"','id="parkingPrintTitle"','id="parkingPageSize"','id="parkingReflectTitle"','id="expParkingMonth"','id="expenseOverview"'];
     order.forEach((token,i)=>assert.ok(at(token)>=0 && (i===0||at(token)>at(order[i-1])),token));
 });
+
+test('the main navigation separates travel expenses from other receipts', () => {
+    const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+    const mainNav = html.match(/<nav class="tab-nav"[\s\S]*?<\/nav>/)[0];
+    assert.match(mainNav, /data-tab="map"[\s\S]*data-tab="expense"[\s\S]*data-tab="receipt"/);
+    assert.match(mainNav, /data-tab="receipt"[^>]*>.*<span class="tab-label">その他レシート<\/span>/);
+    const receipt = html.slice(html.indexOf('id="tab-receipt"'), html.indexOf('id="tab-expense"'));
+    assert.doesNotMatch(receipt, /WorkflowUI\.openParking\(/);
+    for (const feature of ['ReceiptScanner.handleFileSelect', 'ReceiptScanner.generateA4Pdf', 'ReceiptScanner.saveAll', 'ReceiptScanner.sendToParking', 'savedReceiptList']) {
+        assert.ok(receipt.includes(feature), feature);
+    }
+});
+
+test('the shortcut and expense overview both open the one parking intake', () => {
+    const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+    assert.match(html, /WorkflowUI\.openParking\(\)">駐車場の領収書を追加<\/button>/);
+    assert.match(html, /WorkflowUI\.openParking\(\)">駐車場の領収書を追加 →<\/button>/);
+    const intake = html.slice(html.indexOf('id="parkingAddTitle"'), html.indexOf('id="parkingPhotoStatus"'));
+    for (const action of ['ReceiptPhoto.addFiles', 'ParkingScan.open(this)', 'ParkingManager.addItem']) {
+        assert.ok(intake.includes(action), action);
+    }
+    assert.equal((html.match(/ParkingScan\.open\(this\)/g) || []).length, 1);
+    assert.doesNotMatch(intake, /ParkingManager\.importFromScanner/);
+});
