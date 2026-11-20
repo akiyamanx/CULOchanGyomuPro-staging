@@ -64,3 +64,8 @@
 :is(#cropEditor,#photo-cropEditor) .crop-confirm .btn-primary{flex:1 1 auto}
 :is(#cropZoomStatus,#photo-cropZoomStatus){min-width:3.5ch;text-align:center;font-variant-numeric:tabular-nums}
 :is(#cropCornerKeys,#photo-cropCornerKeys),#parkingScanSample{margin-top:6px}
+
+.crop-turn-tools[hidden]{display:none}
+.crop-turn-tools{gap:6px;margin:6px 0}
+.crop-turn-tools .btn{flex:1 1 auto;width:auto;padding-inline:8px}
+.crop-turn-tools [role=status]{font-size:13px;font-variant-numeric:tabular-nums}

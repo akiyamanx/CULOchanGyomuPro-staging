@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="styles/expense.css?v=20261019-3">
     <!-- v2.0追加 - 駐車場利用明細スタイル -->
     <link rel="stylesheet" href="styles/parking.css">
-    <link rel="stylesheet" href="styles/parking-workflow.css?v=20261121-2">
+    <link rel="stylesheet" href="styles/parking-workflow.css?v=20261121-3">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600&display=swap">
     <link rel="stylesheet" href="styles/map/map-styles.css">
     <link rel="stylesheet" href="styles/map/map-expense-styles.css">
@@ -416,7 +416,7 @@
     <script src="receipt/receipt-image-utils.js"></script>
     <script src="receipt/receipt-scanner.js?v=20261019-15"></script>
     <script src="receipt/receipt-photo-geometry.js?v=20261014-3"></script>
-    <script src="receipt/receipt-photo.js?v=20261121-2"></script>
+    <script src="receipt/receipt-photo.js?v=20261121-3"></script>
     <script src="expense/expense-import.js?v=20261105-4"></script>
     <script src="expense/xlsx-lite.js?v=20261105-4"></script>
     <script src="shared/pdf-renderer.js"></script>
@@ -432,9 +432,9 @@
     <script src="expense/visit-name-directory.js?v=20261120-1"></script>
     <script src="expense/parking-manager.js?v=20261121-1"></script>
     <script src="expense/parking-scan-geometry.js?v=20261120-2"></script>
-    <script src="expense/receipt-crop.js?v=20261120-3"></script>
-    <script src="expense/receipt-crop-editor.js?v=20261121-2"></script>
-    <script src="expense/parking-scan.js?v=20261121-2"></script>
+    <script src="expense/receipt-crop.js?v=20261121-3"></script>
+    <script src="expense/receipt-crop-editor.js?v=20261121-3"></script>
+    <script src="expense/parking-scan.js?v=20261121-3"></script>
     <script src="expense/parking-pdf.js?v=20261019-7"></script>
     <script src="map/map-data-storage.js?v=20261117-2"></script>
     <script src="map/v1-converter.js"></script>
@@ -555,7 +555,7 @@
     </script>
 <dialog id="parkingScanDialog" class="parking-dialog scan-dialog" aria-labelledby="parkingScanTitle">
 <div id="parkingScanMain"><h2 id="parkingScanTitle">PDFから領収書を切り出す</h2>
-<div class="parking-actions"><button id="parkingScanPrev" class="btn btn-secondary" type="button">前のページ</button><span id="parkingScanPage"></span><button id="parkingScanNext" class="btn btn-secondary" type="button">次のページ</button><button id="parkingScanRotate" class="btn btn-secondary" type="button">右へ90°回す</button></div>
+<div class="parking-actions"><button id="parkingScanPrev" class="btn btn-secondary" type="button">前のページ</button><span id="parkingScanPage"></span><button id="parkingScanNext" class="btn btn-secondary" type="button">次のページ</button><button id="parkingScanRotate" class="btn btn-secondary" type="button">ページ全体を右に90°</button></div>
 <label for="parkingScanLayout">1ページの並び方</label>
 <select id="parkingScanLayout"><option value="3,2">横3枚 × 縦2段</option><option value="2,3">横2枚 × 縦3段</option><option value="2,2">横2枚 × 縦2段</option><option value="4,1">横4枚</option><option value="2,1">横2枚</option><option value="1,2">縦2枚</option><option value="1,1">1枚</option></select>
 <p class="parking-caption" id="parkingScanStatus" role="status" aria-live="polite"></p>
@@ -566,6 +566,10 @@
 <h2 id="cropTitle" tabindex="-1">切り取り範囲</h2>
 <p id="cropHint" class="parking-caption">四隅の丸は自由に動かせます。線の中央の黄色い目印をつかむと、上・下の線は上下、左・右の線は左右に動きます。２本指で拡大・縮小できます。</p>
 <canvas id="cropSurface" aria-label="切り取り範囲のプレビュー" aria-describedby="cropHint"></canvas>
+<div class="parking-actions crop-turn-tools" id="cropTurnTools" hidden>
+<button class="btn btn-secondary" id="cropTurnLeft" type="button">この1枚を左へ90°</button>
+<button class="btn btn-secondary" id="cropTurnRight" type="button">この1枚を右へ90°</button>
+<span id="cropTurnStatus" role="status"></span></div>
 <div class="parking-actions crop-tools">
 <button class="btn btn-secondary" id="cropMinus" type="button" aria-label="縮小">−</button><span id="cropZoomStatus"></span><button class="btn btn-secondary" id="cropPlus" type="button" aria-label="拡大">＋</button>
 <button class="btn btn-secondary" id="cropFit" type="button">全体を見る</button><button class="btn btn-secondary" id="cropReset" type="button">枠を元に戻す</button>

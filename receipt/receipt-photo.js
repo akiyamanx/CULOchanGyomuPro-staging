@@ -84,8 +84,13 @@ const ReceiptPhoto = (() => {
     }
     function openCrop() {
         if(!base||processing)return;
-        cropEditor.open({source:base,initial:full(),quad:points,invoker:el('receiptCropOpen'),label:'領収書の写真',
-            onApply:quad=>{points=quad;changed();draw();}});
+        cropEditor.open({source:base,initial:full(),quad:points,allowRotation:true,invoker:el('receiptCropOpen'),label:'領収書の写真',
+            onApply:(quad,steps)=>{
+                points=ReceiptCrop.turnQuad(quad,steps);
+                if(steps){quarter=(quarter+steps*90)%360;rebuild(false);}
+                else draw();
+                changed();
+            }});
     }
     async function open(id) {
         const item=ParkingManager.getItemById(id);if(!item?.imageDataUrl||opening||dialog?.open)return;

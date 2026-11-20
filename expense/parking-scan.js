@@ -91,6 +91,12 @@ const ParkingScan = (() => {
         draw();
     }
     function make(tag,value) {const n=document.createElement(tag);if(value!=null)n.textContent=value;return n;}
+    function cropImage(quad,turn,limit){
+        const crop=ReceiptCrop.image(image,quad,limit);
+        if(!turn)return crop;
+        try{return ReceiptCrop.turnImage(crop,turn);}
+        finally{crop.width=crop.height=1;}
+    }
     function draw() {
         const [columns,rows]=el('parkingScanLayout').value.split(',').map(Number);
         const result=GyomuScanner.detectImage(image,{columns,rows});
@@ -105,12 +111,12 @@ const ParkingScan = (() => {
             adjust.type='button';adjust.className='btn';
             adjust.setAttribute('aria-label',(i+1)+'枚目を指でトリミング');
             const initial=ReceiptCrop.fromBox(GyomuScanner.sanitizeBox(box));
-            let quad=initial;
-            const redraw=()=>preview.replaceChildren(ReceiptCrop.image(image,quad,550));
-            adjust.onclick=()=>editor.open({source:image,initial,quad,invoker:adjust,label:(i+1)+'枚目',
-                onApply:next=>{quad=next;redraw();}});
+            let quad=initial, turn=0;
+            const redraw=()=>preview.replaceChildren(cropImage(quad,turn,550));
+            adjust.onclick=()=>editor.open({source:image,initial,quad,turn,allowRotation:true,invoker:adjust,label:(i+1)+'枚目',
+                onApply:(next,steps)=>{quad=next;turn=steps;redraw();}});
             card.append(tag,info,preview,adjust);host.append(card);redraw();
-            return {tick,label,adjust,slot:i,current:()=>quad,edited:()=>quad!==initial};
+            return {tick,label,adjust,slot:i,current:()=>quad,turn:()=>turn,edited:()=>quad!==initial||turn!==0};
         });
         const saved=savedRecords();
         markSaved(saved);
@@ -140,9 +146,9 @@ const ParkingScan = (() => {
             const chosen=cards.filter(c=>c.tick.checked&&!c.tick.disabled);
             const boxes=chosen.map(c=>c.current());
             if(boxes.some((box,i)=>boxes.slice(0,i).some(b=>ReceiptCrop.overlapRatio(box,b)>.15)))throw new Error('選んだ枠が重なっています。同じ領収書を2回追加しないよう、枠を確認してください。');
-            const batch=records(from.hash,page,chosen.map(({slot,current})=>{
+            const batch=records(from.hash,page,chosen.map(({slot,current,turn})=>{
                 const quad=current();
-                const crop=ReceiptCrop.image(image,quad,2400);
+                const crop=cropImage(quad,turn(),2400);
                 try {return {slot,quad,image:crop.toDataURL('image/jpeg',.94)};}
                 finally {crop.width=crop.height=1;}
             }),{layout:layout.value,angle});

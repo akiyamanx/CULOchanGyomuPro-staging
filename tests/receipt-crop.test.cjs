@@ -115,3 +115,26 @@ test('the saved-photo panel uses the same editor without changing the PDF dialog
  ctx.photo.open({source:{width:400,height:800},initial:square,quad:square,invoker:{isConnected:false},label:'写真',onApply:q=>saved=q});
  byId('photo-cropApply').onclick();a.deepEqual(saved,square);a.equal(ctx.photo.isOpen(),false);
 });
+test('quarter-turns keep the selected pixels within the same source quad when mapped back',()=>{
+ const q=[{x:.11,y:.17},{x:.42,y:.20},{x:.46,y:.57},{x:.09,y:.60}];
+ const cw=c.turnQuad(q,1);
+ const expected=[q[3],q[0],q[1],q[2]];
+ cw.forEach((p,i)=>{near(p.x,1-expected[i].y);near(p.y,expected[i].x);});
+ for(const n of [-1,0,1,2,3,4]){
+   const back=c.turnQuad(c.turnQuad(q,n),-n);
+   back.forEach((p,i)=>{near(p.x,q[i].x);near(p.y,q[i].y);});
+   near(c.overlapRatio(back,q),1);
+ }
+});
+test('the rotated cropped image swaps output dimensions without rotating the original canvas',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');
+ const calls=[], ctx2d=Object.fromEntries(['save','restore','translate','rotate','drawImage'].map(k=>[k,(...v)=>calls.push([k,...v])]));
+ const ctx=vm.createContext({document:{createElement:()=>({getContext:()=>ctx2d})}});
+ vm.runInContext(fs.readFileSync(require.resolve('../expense/receipt-crop.js'),'utf8'),ctx);
+ const image={width:200,height:85}, rotated=ctx.ReceiptCrop.turnImage(image,1);
+ a.deepEqual([rotated.width,rotated.height],[85,200]);
+ a.deepEqual([image.width,image.height],[200,85]);
+ a.deepEqual(calls,[['save'],['translate',85,0],['rotate',Math.PI/2],['drawImage',image,0,0,200,85],['restore']]);
+ a.equal(ctx.ReceiptCrop.turnImage(image,4),image);
+ const half=ctx.ReceiptCrop.turnImage(image,2);a.deepEqual([half.width,half.height],[200,85]);
+});

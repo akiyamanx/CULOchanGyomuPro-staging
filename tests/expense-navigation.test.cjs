@@ -115,3 +115,13 @@ test('PDF add result is in its sticky action footer and saved photo opens the sh
     assert.match(photo,/dialog\.showModal\(\);dialog\.scrollTop=0;openCrop\(\)/);
     assert.match(photo,/originalImageDataUrl:item\.originalImageDataUrl\|\|item\.imageDataUrl/);
 });
+test('individual scan rotation is separate from page orientation and saved overlap coordinates',()=>{
+    const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
+    const scanner=fs.readFileSync(require.resolve('../expense/parking-scan.js'),'utf8');
+    assert.match(html,/id="parkingScanRotate"[^>]*>ページ全体を右に90°/);
+    assert.match(html,/id="cropTurnLeft"[^>]*>この1枚を左へ90°/);
+    assert.match(html,/id="cropTurnRight"[^>]*>この1枚を右へ90°/);
+    assert.match(scanner,/let quad=initial, turn=0/);
+    assert.match(scanner,/cropImage\(quad,turn\(\),2400\)/);
+    assert.match(scanner,/\{layout:layout\.value,angle\}\)/);
+});
