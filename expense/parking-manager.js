@@ -71,6 +71,23 @@ const ParkingManager = (() => {
             return added.length;
         });
     }
+    async function appendScanPage(records) {
+        await flushEdits();
+        return serial(async()=>{
+            const key=records[0]?.sourcePageKey;
+            if(!key||records.length>6||records.some(r=>r.sourcePageKey!==key))return -2;
+            if(items.some(r=>r.sourcePageKey===key))return 0;
+            const existing=new Set(items.map(r=>r.originalImageDataUrl||r.imageDataUrl).filter(Boolean));
+            for(const r of records){
+                if(!r.imageDataUrl||existing.has(r.imageDataUrl))return -2;
+                existing.add(r.imageDataUrl);
+            }
+            const batch=records.map(r=>({...blank(),...r}));
+            if(!await save(items.concat(batch)))return -1;
+            renderParkingList();
+            return batch.length;
+        });
+    }
     async function importFromScanner() {
         const receipts = ReceiptScanner.getRecognizedReceipts?.() || [];
         const selected = receipts.filter(r=>r.checked && r.data?.type === 'parking');
@@ -313,7 +330,7 @@ const ParkingManager = (() => {
     }
     function getItemById(id) { const item=items.find(i=>i.id===id); return item ? {...item} : null; }
     function getItems() { return items.map(i=>({...i})); }
-    return {init,importFromScanner,addItem,append,patchItem,readReceipt,removeItem,clearAll,renderParkingList,updateField,
+    return {init,importFromScanner,addItem,append,appendScanPage,patchItem,readReceipt,removeItem,clearAll,renderParkingList,updateField,
         showCustomerPicker,getItemById,getItems,getSelectedItems,selectVisible,snapshotSelected,settled:async()=>{await flushEdits();if(saveError || !ready)throw new Error('駐車場明細を保存できていません。保存状態を確認してください。');}};
 })();
 
