@@ -93,3 +93,11 @@ test('the shortcut and expense overview both open the one parking intake', () =>
     assert.equal((html.match(/ParkingScan\.open\(this\)/g) || []).length, 1);
     assert.doesNotMatch(intake, /ParkingManager\.importFromScanner/);
 });
+
+test('both major expense transitions use the same freestanding divider heading', () => {
+    const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+    for (const id of ['expenseDetailsTitle', 'expenseFinishTitle']) {
+        assert.match(html, new RegExp('<h3 class="section-title expense-divider" id="' + id + '" tabindex="-1">[^\n]+</h3>\\s*<section class="panel-card'));
+    }
+    assert.match(html, /<section class="panel-card finish-card" aria-labelledby="expenseFinishTitle">/);
+});
