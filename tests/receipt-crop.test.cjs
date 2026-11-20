@@ -90,3 +90,28 @@ test('hit testing keeps corners independent and recognizes the lines',()=>{
  const narrow=c.fromBox({x:20,y:20,w:30,h:200});
  a.deepEqual(c.pickHandle(narrow,{x:35,y:20}),{type:'edge',index:0});
 });
+test('the saved-photo panel uses the same editor without changing the PDF dialog or its state',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+ const fakeCanvas=()=>({width:0,height:0,getBoundingClientRect:()=>({left:0,top:0,width:320,height:320}),getContext:()=>new Proxy({},{get:()=>()=>{}})});
+ const buttons=Array.from({length:4},()=>({}));
+ const all=new Map();
+ const byId=k=>{
+   if(!all.has(k))all.set(k,k.endsWith('cropSurface')?fakeCanvas():{hidden:k.endsWith('cropEditor'),focus(){},setAttribute(name,val){this[name]=val;},querySelectorAll:()=>buttons});
+   return all.get(k);
+ };
+ const ctx=vm.createContext({document:{getElementById:byId},ReceiptCrop:c,devicePixelRatio:1,ResizeObserver:class{observe(){}},requestAnimationFrame:f=>f()});
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'../expense/receipt-crop-editor.js'),'utf8')+`
+   this.scanner=ReceiptCropEditor.setup(document.getElementById('cropEditor'));
+   this.photo=ReceiptCropEditor.setup(document.getElementById('photo-cropEditor'),{
+      prefix:'photo-',main:document.getElementById('receiptPhotoMain'),dialog:document.getElementById('receiptPhotoDialog'),mainTitle:'receiptPhotoTitle'
+   });`,ctx);
+ let saved=null;
+ const photo=byId('receiptPhotoDialog'), scan=byId('parkingScanDialog'), main=byId('receiptPhotoMain');
+ photo.scrollTop=127;scan.scrollTop=359;
+ ctx.photo.open({source:{width:400,height:800},initial:square,quad:square,invoker:{isConnected:false},label:'写真',onApply:q=>saved=q});
+ a.equal(main.hidden,true);a.equal(photo['aria-labelledby'],'photo-cropTitle');
+ a.equal(ctx.scanner.isOpen(),false);a.equal(scan.scrollTop,359);
+ ctx.photo.cancel();a.equal(saved,null);a.equal(main.hidden,false);a.equal(photo.scrollTop,127);a.equal(photo['aria-labelledby'],'receiptPhotoTitle');
+ ctx.photo.open({source:{width:400,height:800},initial:square,quad:square,invoker:{isConnected:false},label:'写真',onApply:q=>saved=q});
+ byId('photo-cropApply').onclick();a.deepEqual(saved,square);a.equal(ctx.photo.isOpen(),false);
+});

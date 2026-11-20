@@ -101,3 +101,17 @@ test('both major expense transitions use the same freestanding divider heading',
     }
     assert.match(html, /<section class="panel-card finish-card" aria-labelledby="expenseFinishTitle">/);
 });
+test('PDF add result is in its sticky action footer and saved photo opens the shared crop editor',()=>{
+    const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
+    const css=fs.readFileSync(require.resolve('../styles/parking-workflow.css'),'utf8');
+    const scanner=fs.readFileSync(require.resolve('../expense/parking-scan.js'),'utf8');
+    const photo=fs.readFileSync(require.resolve('../receipt/receipt-photo.js'),'utf8');
+    assert.match(html,/<div class="scan-footer"><p id="parkingScanFeedback"[^>]*role="status"[^>]*><\/p><div class="parking-actions"><button id="parkingScanSave"/);
+    assert.match(css,/\.scan-footer\{bottom:0;position:sticky/);
+    assert.match(scanner,/feedback\('領収書を保存しています…','pending'\)/);
+    assert.match(scanner,/feedback\(count\?count\+'枚追加しました。'/);
+    assert.match(scanner,/if\(adding\)feedback\('追加できませんでした。'/);
+    assert.match(photo,/ReceiptCropEditor\.clonePanel\('photo-'\)/);
+    assert.match(photo,/dialog\.showModal\(\);dialog\.scrollTop=0;openCrop\(\)/);
+    assert.match(photo,/originalImageDataUrl:item\.originalImageDataUrl\|\|item\.imageDataUrl/);
+});

@@ -31,10 +31,16 @@ const ParkingScan = (() => {
         });
     }
     function say(msg) {el('parkingScanStatus').textContent=msg;}
-    async function act(fn) {
+    function feedback(msg, state='') {
+        const node=el('parkingScanFeedback');node.dataset.state=state;node.textContent=msg;
+    }
+    async function act(fn,adding=false) {
         if(busy)return;
         busy=true;syncControls();
-        try {await fn();}catch(e){say(e.message||'PDFを取り込めませんでした。');}
+        try {await fn();}catch(e){
+            const msg=e.message||'PDFを取り込めませんでした。';
+            if(adding)feedback('追加できませんでした。'+msg,'error');else say(msg);
+        }
         finally{busy=false;syncControls();}
     }
     function syncControls() {
@@ -63,7 +69,7 @@ const ParkingScan = (() => {
     function dropCanvas() {if(image){image.width=image.height=1;image=null;}cards=[];el('parkingScanCards').replaceChildren();el('parkingScanSource').replaceChildren();}
     async function dispose() {dropCanvas();const old=task;task=doc=from=null;if(old)await old.destroy().catch(()=>{});}
     async function renderPage(next,rotation) {
-        say('PDFページを読み込み中…');
+        feedback('');say('PDFページを読み込み中…');
         const saved=savedRecords(next), layout=el('parkingScanLayout');
         if(saved.length&&!legacy(saved)){
             layout.value=layout.dataset.previous=saved[0].scanLayout;
@@ -127,6 +133,7 @@ const ParkingScan = (() => {
         const layout=el('parkingScanLayout');layout.dataset.previous=layout.value;
         layout.onchange=()=>{if(!confirmDiscard()){layout.value=layout.dataset.previous;return;}layout.dataset.previous=layout.value;draw();};
         el('parkingScanSave').onclick=()=>act(async()=>{
+            feedback('領収書を保存しています…','pending');
             await ParkingManager.settled();
             const saved=savedRecords();
             if(legacy(saved))throw new Error('旧版で取り込んだページです。残りは写真として追加してください。');
@@ -144,8 +151,9 @@ const ParkingScan = (() => {
             if(count<0)throw new Error('領収書を保存できませんでした。端末の空き容量を確認してください。');
             markSaved(savedRecords());
             const msg=count?count+'枚追加しました。未追加の枠はそのまま選べます。駐車場明細で日付・金額・訪問先を確認してください。':'このページは追加済みです。';
+            feedback(count?count+'枚追加しました。':'選んだ領収書は追加済みです。','success');
             say(msg);el('parkingPhotoStatus').textContent=msg;
-        });
+        },true);
     }
     async function open(input) {
         const file=input.files?.[0];input.value='';if(!file||busy)return;
@@ -153,7 +161,7 @@ const ParkingScan = (() => {
         if(!dialog.dataset.initialized){setup();dialog.dataset.initialized='1';}
         if(!dialog.open){opener=input instanceof HTMLElement ? input : document.activeElement;dialog.showModal();}
         await act(async()=>{
-            await dispose();
+            feedback('');await dispose();
             try {
                 if(file.size>20*1024*1024)throw new Error('PDFは20MBまでです。分割して取り込んでください。');
                 say('PDFを開いています。初回はPDF表示機能の読み込みに通信が必要です。');
