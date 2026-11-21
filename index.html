@@ -156,6 +156,7 @@
                 <p id="parkingReflectPreview" class="parking-caption"></p>
                 <div class="parking-btn-row"><button id="parkingReflectButton" type="button" class="btn btn-save" onclick="ExpenseManager.reflectParkingMonth()">表示中の期間の駐車場代を反映</button></div>
                 <p id="parkingReflectStatus" class="parking-caption" role="status" aria-live="polite"></p>
+                    <div id="parkingReflectJump" hidden><button class="btn btn-primary" type="button" onclick="ExpenseManager.showReflectedParking()">反映した精算明細を見る</button></div>
                     <button class="btn btn-secondary parking-task-back" type="button" onclick="AppCore.switchTab('expense')">精算・PDFの全体へ戻る</button>
                 </section>
                 <details><summary>駐車場記録の管理</summary><button class="btn btn-danger-quiet" onclick="ParkingManager.clearAll()">すべての駐車場記録を削除</button></details>
@@ -423,7 +424,7 @@
     <script src="expense/expense-draft-store.js?v=20261019-15"></script>
     <script src="expense/expense-draft-receipts.js?v=20261019-2"></script>
     <script src="expense/visit-picker.js?v=20261105-6"></script>
-    <script src="expense/expense-manager.js?v=20261121-1"></script>
+    <script src="expense/expense-manager.js?v=20261121-4"></script>
     <script src="expense/expense-pdf.js?v=20261019-7"></script>
     <script src="expense/expense-etc.js?v=20261105-4"></script>
     <!-- v1.3追加 - Phase I: 駐車場明細IndexedDB管理 -->
