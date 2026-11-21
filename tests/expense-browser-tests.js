@@ -79,6 +79,19 @@ async function runExpenseTests() {
         const revisedDraftId=await ExpenseManager.saveDraft();
         await ExpenseManager.loadDraft(revisedDraftId);
         assert(ExpenseManager.applyEtcRecords(records).count===0, 'ETCの旧版は差し替え後に下書きを開き直しても再追加しない');
+        const locked = ExpenseManager.getOrCreateDateRow('2026-10-08');
+        const editDate = (row,value) => {
+            const input=row.querySelector('.exp-date');
+            input.value=value;
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+            return input.value;
+        };
+        assert(editDate(locked,'2026-11-01')==='2026-10-08', '下書き復元後も取込済み行の日付を元に戻す');
+        assert(locked.querySelector('.exp-date-review').hidden===false && locked.querySelector('.exp-date-review-text').textContent.includes('2026-11-01'), '訂正先とETCの確認先を画面に表示');
+        assert(ExpenseManager.getRowsData()[0].highway==='1600' && ExpenseManager.applyEtcRecords(records).count===0, '元の金額と取込履歴を変更せずに保持する');
+        const manual=ExpenseManager.addRow();
+        manual.querySelector('.exp-other').value='100';
+        assert(editDate(manual,'2026-11-02')==='2026-11-02' && manual.querySelector('.exp-date-review').hidden, '手入力だけの明細は日付を変えられる');
         await ExpenseManager.deleteDraft(revisedDraftId);
         output.textContent = checks.join('\n') + '\n完了: ' + checks.length + '項目 PASS（PDFはボタンで別途出力）';
         output.dataset.result = 'pass';

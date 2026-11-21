@@ -10,6 +10,7 @@
 
 const ExpenseManager = (() => {
     let _rowCount = 0;
+    const acceptedDates = new WeakMap();
     let _draftBusy = false, _draftRenderVersion = 0, _parkingBusy = false;
 
     // ==========================================
@@ -40,7 +41,12 @@ const ExpenseManager = (() => {
             + '<span class="exp-row-num">' + _rowCount + '</span>'
             + '<button class="exp-row-del" aria-label="この日の明細を削除" onclick="ExpenseManager.deleteRow(' + _rowCount + ')">削除</button>'
             + '</div>'
-            + '<div class="exp-fg"><label>利用日</label><input type="date" class="exp-input exp-date" onchange="ExpenseManager.onRowDateChange(this)"></div>'
+            + '<div class="exp-fg"><label>利用日</label><input type="date" class="exp-input exp-date" aria-describedby="' + row.id + '-date-review" onchange="ExpenseManager.onRowDateChange(this)"></div>'
+            + '<div class="exp-date-review" hidden><p class="exp-date-review-text" role="status" id="' + row.id + '-date-review"></p>'
+            + '<div class="exp-date-review-links"><button type="button" class="btn btn-secondary exp-date-review-parking" onclick="ExpenseManager.reviewRowImports(this,\'parking\')">駐車場明細を確認</button>'
+            + '<button type="button" class="btn btn-secondary exp-date-review-etc" onclick="ExpenseManager.reviewRowImports(this,\'etc\')">ETC CSV・Excelを確認</button>'
+            + '<button type="button" class="btn btn-secondary exp-date-review-pdf" onclick="ExpenseManager.reviewRowImports(this,\'pdf\')">ETC PDFを確認</button>'
+            + '<button type="button" class="btn btn-secondary" onclick="this.closest(\'.exp-date-review\').hidden=true">閉じる</button></div></div>'
             + '<div class="exp-form-row">'
             + '<div class="exp-fg exp-fg-sm" hidden><label>月</label>'
             + '<input type="number" class="exp-input exp-month" placeholder="4" min="1" max="12"></div>'
@@ -214,18 +220,82 @@ const ExpenseManager = (() => {
     }
 
     function _rowDate(row) {
+        if (acceptedDates.has(row)) return acceptedDates.get(row);
         const fullDate = row.querySelector('.exp-date').value;
         if (fullDate) return ExpenseImport.normalizeDate(fullDate);
+        return legacyRowDate(row);
+    }
+
+    function legacyRowDate(row) {
         // 旧下書きの月・日は提出年を使用する。
         const year = getHeaderData().submitDate.slice(0, 4);
         return ExpenseImport.normalizeDate(year + '-' + row.querySelector('.exp-month').value + '-' + row.querySelector('.exp-day').value);
     }
 
-    function onRowDateChange(input) {
-        const date = ExpenseImport.normalizeDate(input.value);
-        const row = input.closest('.exp-row');
+    function setRowDate(row, date) {
+        acceptedDates.set(row,date);
+        row.querySelector('.exp-date').value = date;
         row.querySelector('.exp-month').value = date ? Number(date.slice(5, 7)) : '';
         row.querySelector('.exp-day').value = date ? Number(date.slice(8, 10)) : '';
+    }
+
+    function importedSources(row) {
+        try {
+            const parking = _metadata(row,'parkingImports',{});
+            const keys = _metadata(row,'etcKeys',[]), entries = _metadata(row,'etcEntries',[]);
+            if (!parking || typeof parking !== 'object' || Array.isArray(parking) || !Array.isArray(keys) || !Array.isArray(entries))
+                return {unknown:true};
+            return {parking:Object.keys(parking).length > 0, etc:keys.length > 0 || entries.length > 0, pdf:Boolean(row.dataset.etcPdfFingerprint)};
+        } catch { return {unknown:true}; }
+    }
+
+    function onRowDateChange(input) {
+        const row = input.closest('.exp-row');
+        if (!row) return;
+        const date = ExpenseImport.normalizeDate(input.value);
+        const before = acceptedDates.has(row) ? acceptedDates.get(row) : legacyRowDate(row);
+        const sources = importedSources(row);
+        const panel = row.querySelector('.exp-date-review');
+        if (date !== before && Object.values(sources).some(Boolean)) {
+            setRowDate(row,before);
+            if (panel) {
+                const names = [sources.parking && '駐車場',sources.etc && 'ETC（CSV・Excel）',sources.pdf && 'ETC PDF'].filter(Boolean).join('・');
+                row.querySelector('.exp-date-review-text').textContent = sources.unknown
+                    ? '取込履歴を確認できないため、利用日と金額は変えていません。下書きと元の明細を確認してください。'
+                    : (before || '日付未設定') + ' → ' + (date || '日付なし') + '：' + names + 'を取り込んだ行なので、利用日と金額は元のままです。日付を直す場合は、元の明細を確認してから正しい日に反映してください。';
+                for (const key of ['parking','etc','pdf']) row.querySelector('.exp-date-review-'+key).hidden = !sources[key];
+                panel.hidden = false;
+            }
+            return;
+        }
+        setRowDate(row,date);
+        if (panel) panel.hidden = true;
+    }
+
+    function reviewRowImports(button, source) {
+        const row = button.closest('.exp-row');
+        if (!row) return;
+        const day = _rowDate(row);
+        if (source === 'parking') {
+            const monthField = document.getElementById('parkingFilterMonth');
+            const dayField = document.getElementById('parkingFilterDay');
+            if (day && monthField && dayField) {
+                monthField.value = day.slice(0,7);
+                dayField.value = day;
+                const status = document.getElementById('parkingReflectStatus');
+                if (status) status.textContent = '';
+            }
+            WorkflowUI.openParking();
+            ParkingManager.renderParkingList();
+        } else if (source === 'etc') {
+            WorkflowUI.jumpExpense('importTitle');
+        } else if (source === 'pdf') {
+            const section = document.getElementById('etcSection');
+            if (!section) return;
+            section.open = true;
+            section.querySelector('summary')?.focus({preventScroll:true});
+            section.scrollIntoView({block:'start',behavior:'instant'});
+        }
     }
 
     function _assertUniqueDates(dates) {
@@ -242,10 +312,9 @@ const ExpenseManager = (() => {
         _assertUniqueDates([date]);
         const rows = Array.from(document.querySelectorAll('#expenseRows .exp-row'));
         let row = rows.find(item => _rowDate(item) === date);
-        if (!row) row = rows.find(item => Array.from(item.querySelectorAll('input')).every(input => !input.value));
+        if (!row) row = rows.find(item => !Object.values(importedSources(item)).some(Boolean) && Array.from(item.querySelectorAll('input')).every(input => !input.value));
         if (!row) row = addRow();
-        row.querySelector('.exp-date').value = date;
-        onRowDateChange(row.querySelector('.exp-date'));
+        setRowDate(row,date);
         return row;
     }
 
@@ -553,7 +622,8 @@ const ExpenseManager = (() => {
                 addRow();
                 const row = document.getElementById('expRow-' + _rowCount);
                 if (!row) return;
-                row.querySelector('.exp-date').value = ExpenseImport.normalizeDate(rd.date || (draft.submitDate || '').slice(0, 4) + '-' + rd.month + '-' + rd.day);
+                const date = ExpenseImport.normalizeDate(rd.date || (draft.submitDate || '').slice(0, 4) + '-' + rd.month + '-' + rd.day);
+                setRowDate(row,date);
                 row.querySelector('.exp-parking').value = rd.parking || '';
                 row.querySelector('.exp-dest-company').value = rd.destCompany || '';
                 row.querySelector('.exp-dest-address').value = rd.destAddress || '';
@@ -561,9 +631,10 @@ const ExpenseManager = (() => {
                 row.dataset.etcEntries = JSON.stringify(rd.etcEntries || []);
                 row.dataset.etcPdfFingerprint = rd.etcPdfFingerprint || '';
                 row.dataset.parkingImports = JSON.stringify(rd.parkingImports || {});
-                row.querySelector('.exp-month').value = rd.month || '';
-                row.querySelector('.exp-day').value = rd.day || '';
-                if (row.querySelector('.exp-date').value) onRowDateChange(row.querySelector('.exp-date'));
+                if (!date) {
+                    row.querySelector('.exp-month').value = rd.month || '';
+                    row.querySelector('.exp-day').value = rd.day || '';
+                }
                 row.querySelector('.exp-transport').value = rd.transport || '';
                 row.querySelector('.exp-distance').value = rd.distance || '';
                 row.querySelector('.exp-gas').value = rd.gasCost || '';
@@ -715,7 +786,7 @@ const ExpenseManager = (() => {
 
     return {
         init, addRow, deleteRow, onDistanceChange, recalculate, isBusy:()=>_draftBusy,
-        onRowDateChange, getOrCreateDateRow, reviewEtcRecords, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, showReflectedParking, applyRoute, applyEtcDay,
+        onRowDateChange, reviewRowImports, getOrCreateDateRow, reviewEtcRecords, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, showReflectedParking, applyRoute, applyEtcDay,
         getHeaderData, getRowsData, parseHighway, calcGasCost,
         saveDraft, loadDraft, deleteDraft, renderDraftList, previewDraftReceipts, clearAll,
         trimToCity: _trimToCity,
