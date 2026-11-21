@@ -6,7 +6,7 @@
 //   ・この端末で何をどう変えたかは、前回同期時の各項目の要約(ハッシュ)と見比べて見つける(保存の場所ごとに手を入れない)。
 //   ・初回(両端末ともデータあり)は置き換えずに合わせる。初回の時刻は「不明(1)」とし、以後の本当の編集が必ず勝つ。
 //   ・同じMF番号が別IDで両端末にある(各端末で取り込んだ)場合は、利用者の入力が無い方だけをまとめる(mf-dedupe と同じ基準)。
-// 同期しないもの(端末ごと): APIキー・接続設定、表示中の月、地図の座標キャッシュ、メール取り込みの差出人設定、
+// 同期しないもの(端末ごと): APIキー・接続設定、表示中の月、地図の座標キャッシュ、
 //   写真を含むもの(レシート・駐車場・下書き・ETC)。写真入りは「送る/受け取る」で。
 // トークンは扱わない(通信は差し替え可能な adapter に任せる)。ログに中身は出さない(コードだけ)。
 const DataSync = (() => {
@@ -327,6 +327,8 @@ const DataSync = (() => {
         // massDelete: 'ask'(既定。多くの削除は止めて確認) / 'allow'(伝える) / 'restore'(消えた分を他端末から戻す)
         async function syncOnce(opt) {
             const op = opt || {};
+            const allowed = () => !op.stillAllowed || op.stillAllowed();
+            if (!allowed()) return { ok: false, code: 'not_connected' };
             if (!adapter || !adapter.available || !adapter.available().connected) return { ok: false, code: 'not_connected' };
             const now = nowMs();
             let st, local;
@@ -336,6 +338,7 @@ const DataSync = (() => {
             if (first || op.massDelete === 'restore') {
                 if (typeof o.backup === 'function' && !st.backupAt) {
                     try { await o.backup(); } catch (e) { return { ok: false, code: 'backup_failed' }; }
+                    if (!allowed()) return { ok: false, code: 'not_connected' };
                     st.backupAt = new Date(now).toISOString(); saveState(st);
                 }
             }
@@ -347,12 +350,14 @@ const DataSync = (() => {
             // 他の端末のファイル
             let files;
             try { files = await withTimeout(adapter.list()); } catch (e) { return { ok: false, code: errCode(e) }; }
+            if (!allowed()) return { ok: false, code: 'not_connected' };
             const mine = files.filter(f => f.deviceId === st.deviceId);
             const others = files.filter(f => f.deviceId !== st.deviceId && DEVICE_RE.test(String(f.deviceId))).slice(0, MAX_FILES);
             const warnings = []; let dropped = 0;
             const conflicts = { n: 0 }; const fromRemote = new Set();
             let added = 0, changed = 0;
             for (const f of others) {
+                if (!allowed()) return { ok: false, code: 'not_connected' };
                 let doc;
                 try { doc = parseDoc(await withTimeout(adapter.read(f)), f.deviceId, now); } catch (e) { warnings.push('file_unreadable'); continue; }
                 if (!doc.ok) { warnings.push(doc.code === 'newer_version' ? 'newer_version' : 'file_invalid'); continue; }
@@ -365,6 +370,7 @@ const DataSync = (() => {
                     view[coll].set(key, m);
                 }
             }
+            if (!allowed()) return { ok: false, code: 'not_connected' };
             if (dropped) warnings.push('records_dropped');
             const mfMerged = mfMerge(view, fromRemote, now);
             // 書く前にもう一度、手元が変わっていないか(同期中の編集を消さない)
@@ -388,6 +394,7 @@ const DataSync = (() => {
                 try {
                     const fileId = (mine.find(f => f.id === st.fileId) || mine[0] || {}).id || null;
                     const res = await withTimeout(adapter.write({ fileId, deviceId: st.deviceId, savedAt: new Date(now).toISOString(), text: docText }));
+                    if (!allowed()) return { ok: false, code: 'not_connected' };
                     const st2 = loadState(); st2.fileId = res && res.id || fileId; st2.pushHash = ph; saveState(st2); pushed = true;
                 } catch (e) { warnings.push('push_failed'); }
             }

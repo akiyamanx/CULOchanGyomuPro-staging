@@ -413,7 +413,7 @@ const ExpenseManager = (() => {
     }
 
     // 選んだ期間は再集計し、移動した同じ領収書だけを期間外の旧行から除く。
-    function syncParking(period) {
+    function planParking(period) {
         const {byDate,count,invalid,amountTotal} = collectParking(period);
         const existing = Array.from(document.querySelectorAll('#expenseRows .exp-row'));
         const selectedIds = new Map();
@@ -441,16 +441,28 @@ const ExpenseManager = (() => {
             plans.push({row, date, previous, next});
         }
         _assertUniqueDates(new Set([...byDate.keys(), ...plans.filter(p=>p.date).map(p=>p.date)]));
-        for (const date of missing) plans.push({row:getOrCreateDateRow(date), previous:{}, next:byDate.get(date)});
-        for (const {row,previous,next} of plans) {
-            const input = row.querySelector('.exp-parking');
-            const sum = imports => Object.values(imports).reduce((total,value)=>total+Number(value),0);
-            const manual = Math.max(0, (parseInt(input.value) || 0) - sum(previous));
-            input.value = (manual + sum(next)) || '';
-            row.dataset.parkingImports = JSON.stringify(next);
+        for (const date of missing) plans.push({date, previous:{}, next:byDate.get(date)});
+        const sum = imports => Object.values(imports).reduce((total,value)=>total+Number(value),0);
+        const updates = plans.map(({row,date,previous,next}) => {
+            const manual = Math.max(0, (parseInt(row?.querySelector('.exp-parking').value) || 0) - sum(previous));
+            return {row,date,value:(manual + sum(next)) || '',metadata:JSON.stringify(next)};
+        });
+        return {updates,result:{count, invalid, amountTotal, dates:[...updated].sort()}};
+    }
+
+    function commitParking(plan) {
+        for (const {row:existing,date,value,metadata} of plan.updates) {
+            const row = existing || getOrCreateDateRow(date);
+            row.querySelector('.exp-parking').value = value;
+            row.dataset.parkingImports = metadata;
         }
+        return plan.result;
+    }
+
+    function syncParking(period) {
+        const result = commitParking(planParking(period));
         recalculate();
-        return {count, invalid, amountTotal, dates:[...updated].sort()};
+        return result;
     }
 
     let lastParkingReflection = null;
@@ -513,20 +525,40 @@ const ExpenseManager = (() => {
         finally { _parkingBusy = false; previewParkingReflection(); }
     }
 
-    function applyRoute(date, totalKm, destination, options = {}) {
+    function validateRoute(date, options = {}) {
         if (!options.fromEtc && typeof EtcWorkflow !== 'undefined' && EtcWorkflow.isManaged(date))
             throw new Error('この日はETC・寄り道の訪問順を確認中です。「ETC PDF・寄り道」の区間距離を確認して、そこから精算書へ反映してください。');
+        _assertUniqueDates([date]);
+    }
+
+    function commitRoute(date, totalKm, destination) {
         const row = getOrCreateDateRow(date);
         row.querySelector('.exp-dest-company').value = destination.company || '';
         row.querySelector('.exp-dest-address').value = destination.address || '';
         if (Number.isFinite(totalKm)) {
             const input = row.querySelector('.exp-distance');
             input.value = totalKm;
-            onDistanceChange(input);
+            row.querySelector('.exp-gas').value = calcGasCost(totalKm) || '';
         }
         if (!row.querySelector('.exp-transport').value) row.querySelector('.exp-transport').value = '自家用車';
+    }
+
+    function applyRoute(date, totalKm, destination, options = {}) {
+        validateRoute(date, options);
+        commitRoute(date, totalKm, destination);
         _refreshHeaderDestinations();
         recalculate();
+    }
+
+    function reflectRouteAndParking(date, totalKm, destination) {
+        // Validate both sides before touching any rows, including parking's original date.
+        validateRoute(date);
+        const parking = planParking(date);
+        commitRoute(date, totalKm, destination);
+        const result = commitParking(parking);
+        _refreshHeaderDestinations();
+        recalculate();
+        return result;
     }
 
     function applyEtcDay(day, totals, km, fingerprint) {
@@ -788,7 +820,7 @@ const ExpenseManager = (() => {
 
     return {
         init, addRow, deleteRow, onDistanceChange, recalculate, isBusy:()=>_draftBusy,
-        onRowDateChange, reviewRowImports, getOrCreateDateRow, reviewEtcRecords, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, showReflectedParking, applyRoute, applyEtcDay,
+        onRowDateChange, reviewRowImports, getOrCreateDateRow, reviewEtcRecords, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, showReflectedParking, applyRoute, reflectRouteAndParking, applyEtcDay,
         getHeaderData, getRowsData, parseHighway, calcGasCost,
         saveDraft, loadDraft, deleteDraft, renderDraftList, previewDraftReceipts, clearAll,
         trimToCity: _trimToCity,

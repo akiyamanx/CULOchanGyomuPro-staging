@@ -48,6 +48,25 @@ async function runExpenseTests() {
         assert(document.getElementById('mapExpSummary').textContent.includes('180 km'), 'マップ集計に実際の計算済み距離を表示');
         await MapExpenseForm.reflectToExpense();
         assert(output.dataset.tab === 'expense', 'マップから反映して精算書を開く');
+        const priorMonth = ExpenseManager.getOrCreateDateRow('2026-09-30');
+        priorMonth.dataset.parkingImports = '{"corrected":600}';
+        priorMonth.querySelector('.exp-parking').value = '800';
+        const duplicate = ExpenseManager.addRow();
+        duplicate.querySelector('.exp-date').value = '2026-09-30';
+        duplicate.querySelector('.exp-month').value = '9';
+        duplicate.querySelector('.exp-day').value = '30';
+        fixture.parking.push({id:'corrected',date:'2026-10-08',amount:600});
+        const beforeBlocked = JSON.stringify(ExpenseManager.getRowsData());
+        let blocked = false;
+        try { ExpenseManager.reflectRouteAndParking('2026-10-08',145,{company:'架空・変更後',address:'架空'}); }
+        catch (e) { blocked = /2026-09-30 の明細が複数/.test(e.message); }
+        assert(blocked && JSON.stringify(ExpenseManager.getRowsData())===beforeBlocked, '元月に重複があると新月の行先・距離・駐車場代を変更しない');
+        duplicate.remove();
+        ExpenseManager.reflectRouteAndParking('2026-10-08',145,{company:'架空・変更後',address:'架空'});
+        const after = ExpenseManager.getOrCreateDateRow('2026-10-08');
+        assert(after.querySelector('.exp-distance').value==='145' && after.querySelector('.exp-parking').value==='700' && priorMonth.querySelector('.exp-parking').value==='200', '月をまたぐ反映に成功しても両日の手入力の駐車場代を維持');
+        priorMonth.remove();
+        fixture.parking.pop();
         fixture.customers[0].address += '変更';
         assert(RouteManager.getDistance('route_1','2026-10-08') === null, '住所変更後の古い距離を使わない');
         fixture.customers[0].address = '千葉県千葉市中央区中央1-1';
