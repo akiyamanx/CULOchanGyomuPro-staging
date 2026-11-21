@@ -54,6 +54,32 @@ async function runExpenseTests() {
         // 7行を用意し、PDFの2ページ出力を手動検証する。
         for (let day = 10; day <= 14; day++) ExpenseManager.applyRoute('2026-10-' + day, 110, {company:'架空訪問先' + day,address:'千葉県千葉市'});
         assert(ExpenseManager.getRowsData().length === 7, '7日分の明細をPDF改ページ検証用に準備');
+        const correctionCsv = '利用年月日,利用ＩＣ（自）,利用ＩＣ（至）,通行料金\n2026/10/08,千葉,東京,1100';
+        const corrected = ExpenseImport.parseEtcCsv(correctionCsv)[0];
+        const pickerReady = new Promise((resolve,reject)=>{
+            const observer=new MutationObserver(()=>{
+                const select=document.querySelector('#expEtcModal .etc-review-choice');
+                if(select){observer.disconnect();clearTimeout(timeout);resolve(select);}
+            });
+            const timeout=setTimeout(()=>{observer.disconnect();reject(Error('ETC確認画面が開きません'));},3000);
+            observer.observe(document.body,{childList:true,subtree:true});
+        });
+        ExpenseEtc.handleFile({target:{files:[new File([correctionCsv],'fixture-etc.csv',{type:'text/csv'})],value:''}});
+        const choice=await pickerReady;
+        assert(choice.value===''&&choice.options[0].textContent==='今回反映しない', 'ETC候補は未承認のまま表示する');
+        ExpenseEtc.toggleAll();
+        ExpenseEtc.applyToExpense();
+        assert(ExpenseManager.getRowsData()[0].highway==='1700', '全選択でも確認待ちのETC候補を反映しない');
+        const old = ExpenseManager.reviewEtcRecords([corrected])[0].candidates[0];
+        assert(old.amount===1200&&old.entry==='千葉'&&old.exit==='東京', 'ETCの差し替え候補は元の金額と区間を示す');
+        choice.value='0';
+        ExpenseEtc.applyToExpense();
+        assert(document.getElementById('expEtcModal').style.display==='none', 'ETCの確認操作から差し替えを実行');
+        assert(ExpenseManager.getRowsData()[0].highway==='1600'&&ExpenseManager.getRowsData()[0].highwayCount==='2', 'ETCの差し替えで件数と他の通行を維持');
+        const revisedDraftId=await ExpenseManager.saveDraft();
+        await ExpenseManager.loadDraft(revisedDraftId);
+        assert(ExpenseManager.applyEtcRecords(records).count===0, 'ETCの旧版は差し替え後に下書きを開き直しても再追加しない');
+        await ExpenseManager.deleteDraft(revisedDraftId);
         output.textContent = checks.join('\n') + '\n完了: ' + checks.length + '項目 PASS（PDFはボタンで別途出力）';
         output.dataset.result = 'pass';
     } catch (error) { output.textContent = checks.join('\n') + '\nFAIL ' + error.stack; output.dataset.result = 'fail'; }

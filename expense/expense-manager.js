@@ -185,6 +185,7 @@ const ExpenseManager = (() => {
                 destCompany: row.querySelector('.exp-dest-company').value,
                 destAddress: row.querySelector('.exp-dest-address').value,
                 etcKeys: _metadata(row, 'etcKeys', []),
+                etcEntries: _metadata(row, 'etcEntries', []),
                 etcPdfFingerprint: row.dataset.etcPdfFingerprint || '',
                 parkingImports: _metadata(row, 'parkingImports', {}),
                 month: row.querySelector('.exp-month').value,
@@ -248,30 +249,75 @@ const ExpenseManager = (() => {
         return row;
     }
 
+    function _etcRowState() {
+        return Array.from(document.querySelectorAll('#expenseRows .exp-row')).map(row => {
+            const dates = _rowDate(row), keys = _metadata(row, 'etcKeys', []), records=_metadata(row,'etcEntries',[]);
+            if(!Array.isArray(keys)||!Array.isArray(records)||records.some(r=>!r||!keys.includes(r.key)||!Array.isArray(r.aliases||[])))
+                throw new Error('保存済みETCの情報を確認してください。');
+            return {row, date:dates, entries:keys.map(key=>records.find(r=>r.key===key)||{key}), changed:false};
+        });
+    }
+
+    function reviewEtcRecords(records) {
+        const prior = _etcRowState().flatMap(s=>s.entries);
+        return records.map((record, i)=>{
+            const known=prior.concat(records.slice(0,i));
+            const duplicate=known.some(r=>r.key===record.key||r.aliases?.includes(record.key));
+            const candidates=duplicate ? [] : known.filter(r=>ExpenseImport.etcCandidate(r,record))
+                .map(r=>{
+                    const old=ExpenseImport.etcStoredDetails(r,record);
+                    return {key:r.key,date:old.date,time:old.time,entry:old.entry,exit:old.exit,amount:old.amount,
+                        reference:old.reference};
+                });
+            return {duplicate,candidates};
+        });
+    }
+
     function applyEtcRecords(records) {
         _assertUniqueDates(records.map(record => record.date));
-        const rows = Array.from(document.querySelectorAll('#expenseRows .exp-row'));
-        if (rows.some(row => row.dataset.etcPdfFingerprint && records.some(r => r.date === _rowDate(row))))
+        const rows=_etcRowState();
+        if (rows.some(s => s.row.dataset.etcPdfFingerprint && records.some(r => r.date === s.date)))
             throw new Error('同じ日のETC PDFが反映済みです。二重計上を防ぐため、その日は「ETC PDF・寄り道」で確認してください。');
-        const imported = new Set(rows.flatMap(row => _metadata(row, 'etcKeys', [])));
-        let count = 0, amount = 0;
+        let count=0, amount=0, replaced=0;
         for (const record of records) {
-            if (imported.has(record.key)) continue;
-            const row = getOrCreateDateRow(record.date);
-            const highway = row.querySelector('.exp-highway');
-            highway.value = _parseHighway(highway.value) + record.amount;
-            const counter = row.querySelector('.exp-highway-count');
-            counter.value = (parseInt(counter.value) || 0) + 1;
-            const keys = _metadata(row, 'etcKeys', []);
-            keys.push(record.key);
-            row.dataset.etcKeys = JSON.stringify(keys);
-            imported.add(record.key);
-            const transport = row.querySelector('.exp-transport');
-            if (!transport.value) transport.value = '自家用車';
-            count++; amount += record.amount;
+            const all=rows.flatMap(s=>s.entries.map(r=>({s,r})));
+            if (all.some(({r})=>r.key===record.key||r.aliases?.includes(record.key))) continue;
+            const candidates=all.filter(({r})=>ExpenseImport.etcCandidate(r,record));
+            const decision=record.review;
+            const old=decision?.replace ? candidates.find(({r})=>r.key===decision.replace) : null;
+            if (decision?.replace && !old || candidates.length && !old && decision?.distinct!==true)
+                throw new Error('同じ通行の候補を確認し、差し替えか別の通行かを選び直してください。');
+            if (!Number.isSafeInteger(record.amount)||record.amount<=0) throw new Error('通行料金を確認してください。');
+            let s=rows.find(x=>x.date===record.date);
+            if(!s){s={row:null,date:record.date,entries:[],changed:false};rows.push(s);}
+            if (s.total == null) {
+                s.total=s.row ? _parseHighway(String(s.row.querySelector('.exp-highway').value || '')) : 0;
+                s.count=s.row ? parseInt(s.row.querySelector('.exp-highway-count').value)||0 : 0;
+            }
+            const clean={...record};delete clean.review;
+            if(old) {
+                const previous=ExpenseImport.etcStoredDetails(old.r,record).amount;
+                const minimum=s.entries.reduce((sum,r)=>sum+(r===old.r?previous:Number.isSafeInteger(r.amount)?r.amount:0),0);
+                if (old.s!==s || !Number.isSafeInteger(previous) || previous<=0 || s.total<minimum || s.count<s.entries.length)
+                    throw new Error('元の通行が別の日付にあるか、手修正された高速代です。精算行を確認してください。');
+                s.entries.splice(s.entries.indexOf(old.r),1,{...clean,aliases:[...(old.r.aliases||[]),old.r.key]});
+                s.total+=record.amount-previous;amount+=record.amount-previous;replaced++;
+            } else {
+                s.entries.push(clean);s.total+=record.amount;s.count++;amount+=record.amount;
+            }
+            s.changed=true;count++;
+        }
+        for (const s of rows.filter(r=>r.changed)) {
+            const row=s.row || getOrCreateDateRow(s.date);
+            row.querySelector('.exp-highway').value=String(s.total);
+            row.querySelector('.exp-highway-count').value=String(s.count);
+            row.dataset.etcKeys=JSON.stringify(s.entries.map(r=>r.key));
+            row.dataset.etcEntries=JSON.stringify(s.entries.filter(r=>Number.isSafeInteger(r.amount)));
+            const transport=row.querySelector('.exp-transport');
+            if(!transport.value)transport.value='自家用車';
         }
         recalculate();
-        return { count, amount, skipped: records.length - count };
+        return {count,amount,replaced,skipped:records.length-count};
     }
 
     // Preview and application use the same eligible records, independent of PDF photo selection.
@@ -422,6 +468,7 @@ const ExpenseManager = (() => {
         row.querySelector('.exp-highway').value = totals.amount || '';
         row.querySelector('.exp-highway-count').value = totals.accepted.length || '';
         row.dataset.etcKeys = '[]';
+        row.dataset.etcEntries = '[]';
         row.dataset.etcPdfFingerprint = fingerprint;
         recalculate();
         alert(day.date + ' の本部提出分 ' + totals.accepted.length + '件・' + totals.amount.toLocaleString() + '円、距離 ' + km + 'kmを反映しました。下書きを保存してください。');
@@ -511,6 +558,7 @@ const ExpenseManager = (() => {
                 row.querySelector('.exp-dest-company').value = rd.destCompany || '';
                 row.querySelector('.exp-dest-address').value = rd.destAddress || '';
                 row.dataset.etcKeys = JSON.stringify(rd.etcKeys || []);
+                row.dataset.etcEntries = JSON.stringify(rd.etcEntries || []);
                 row.dataset.etcPdfFingerprint = rd.etcPdfFingerprint || '';
                 row.dataset.parkingImports = JSON.stringify(rd.parkingImports || {});
                 row.querySelector('.exp-month').value = rd.month || '';
@@ -667,7 +715,7 @@ const ExpenseManager = (() => {
 
     return {
         init, addRow, deleteRow, onDistanceChange, recalculate, isBusy:()=>_draftBusy,
-        onRowDateChange, getOrCreateDateRow, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, showReflectedParking, applyRoute, applyEtcDay,
+        onRowDateChange, getOrCreateDateRow, reviewEtcRecords, applyEtcRecords, syncParking, reflectParkingMonth, previewParkingReflection, showReflectedParking, applyRoute, applyEtcDay,
         getHeaderData, getRowsData, parseHighway, calcGasCost,
         saveDraft, loadDraft, deleteDraft, renderDraftList, previewDraftReceipts, clearAll,
         trimToCity: _trimToCity,
