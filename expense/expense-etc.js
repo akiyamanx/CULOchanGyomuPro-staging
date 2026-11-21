@@ -84,12 +84,15 @@ const ExpenseEtc = (() => {
                 if(check.duplicate){
                     html+='<p class="exp-picker-item">'+label+'　反映済み・差し替え済み（追加なし）</p>';
                 } else if(check.candidates.length) {
+                    const missingAmount=check.candidates.some(old=>old.amount==null);
                     html+='<div class="exp-picker-item"><label><strong>要確認 '+label+' ¥'+r.amount.toLocaleString()+'</strong><br>'
                         +'<select class="etc-review-choice" data-idx="'+r.idx+'"><option value="">今回反映しない</option>'
-                        +check.candidates.map((old,i)=>old.amount==null ? '<option disabled>旧明細の金額を確認できません</option>' : '<option value="'+i+'">差し替え '+(i+1)+'：旧 ¥'+old.amount.toLocaleString()
+                        +check.candidates.map((old,i)=>old.amount==null ? '<option disabled>差し替え不可（元料金の記録なし）</option>' : '<option value="'+i+'">差し替え '+(i+1)+'：旧 ¥'+old.amount.toLocaleString()
                             +'｜'+ExpenseImport.escapeHtml([old.date,old.time,(old.entry||'—')+' → '+(old.exit||'—'),
                                 old.reference && '番号 '+old.reference].filter(Boolean).join(' '))+'</option>').join('')
-                        +'<option value="distinct">別の通行として追加</option></select></label></div>';
+                        +'<option value="distinct">別の通行として追加</option></select></label>'
+                        +(missingAmount ? '<small style="display:block">元のETC料金が記録されていない候補は差し替えできません。同じ通行か判断できないときは「今回反映しない」のまま、元の明細を確認してください。</small>' : '')
+                        +'</div>';
                 } else {
                     html += '<label class="exp-picker-item">'
                         + '<input type="checkbox" class="etc-exp-cb" data-idx="' + r.idx + '" checked>'

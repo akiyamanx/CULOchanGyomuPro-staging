@@ -120,15 +120,9 @@ const ExpenseImport = (() => {
         const n=/^\d+$/.test(raw) ? Number(raw) : null;
         return Number.isSafeInteger(n) && n>0 ? n : null;
     }
-    function etcStoredDetails(old, next) {
-        if (Number.isSafeInteger(old.amount) && old.amount>0) return old;
-        const fields=decodeEtcKey(old.key);
-        if(!fields||!next.columns) return {};
-        const [d,a,e,x]=next.columns;
-        // 列位置が違い旧金額を特定できない場合は差し替えない。
-        return e>=0 && x>=0 && normalizeDate(fields[d])===next.date && etcText(fields[e])===next.entry &&
-            etcText(fields[x])===next.exit && etcAmount(fields[a])!==null
-            ? {...etcDetails(fields,next.columns,next.date,fields[d]),amount:etcAmount(fields[a])} : {};
+    function etcStoredDetails(old) {
+        // 旧キーには列名がない。新しい明細の列順から元料金は復元できない。
+        return Number.isSafeInteger(old.amount) && old.amount > 0 ? old : {};
     }
 
     function escapeHtml(value) {

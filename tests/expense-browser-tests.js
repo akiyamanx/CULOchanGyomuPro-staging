@@ -56,16 +56,16 @@ async function runExpenseTests() {
         assert(ExpenseManager.getRowsData().length === 7, '7日分の明細をPDF改ページ検証用に準備');
         const correctionCsv = '利用年月日,利用ＩＣ（自）,利用ＩＣ（至）,通行料金\n2026/10/08,千葉,東京,1100';
         const corrected = ExpenseImport.parseEtcCsv(correctionCsv)[0];
-        const pickerReady = new Promise((resolve,reject)=>{
+        const openEtcFixture = text => new Promise((resolve,reject)=>{
             const observer=new MutationObserver(()=>{
                 const select=document.querySelector('#expEtcModal .etc-review-choice');
                 if(select){observer.disconnect();clearTimeout(timeout);resolve(select);}
             });
             const timeout=setTimeout(()=>{observer.disconnect();reject(Error('ETC確認画面が開きません'));},3000);
             observer.observe(document.body,{childList:true,subtree:true});
+            ExpenseEtc.handleFile({target:{files:[new File([text],'fixture-etc.csv',{type:'text/csv'})],value:''}});
         });
-        ExpenseEtc.handleFile({target:{files:[new File([correctionCsv],'fixture-etc.csv',{type:'text/csv'})],value:''}});
-        const choice=await pickerReady;
+        const choice=await openEtcFixture(correctionCsv);
         assert(choice.value===''&&choice.options[0].textContent==='今回反映しない', 'ETC候補は未承認のまま表示する');
         ExpenseEtc.toggleAll();
         ExpenseEtc.applyToExpense();
@@ -92,6 +92,19 @@ async function runExpenseTests() {
         const manual=ExpenseManager.addRow();
         manual.querySelector('.exp-other').value='100';
         assert(editDate(manual,'2026-11-02')==='2026-11-02' && manual.querySelector('.exp-date-review').hidden, '手入力だけの明細は日付を変えられる');
+        const legacy=ExpenseManager.getOrCreateDateRow('2026-10-14');
+        const legacyCsv='利用年月日,利用時刻,入口,出口,通行料金,割引前料金\n2026/10/14,09:30,千葉,東京,1000,1500';
+        const legacyRevision='利用年月日,利用時刻,入口,出口,割引前料金,確定料金\n2026/10/14,09:30,千葉,東京,1500,800';
+        legacy.dataset.etcKeys=JSON.stringify(ExpenseImport.parseEtcCsv(legacyCsv).map(r=>r.key));
+        legacy.querySelector('.exp-highway').value='1600';
+        legacy.querySelector('.exp-highway-count').value='1';
+        const legacyChoice=await openEtcFixture(legacyRevision);
+        assert(legacyChoice.value==='' && legacyChoice.options[1].disabled && !legacyChoice.textContent.includes('1,500'), '元料金の記録がない旧データは推測額を出さず差し替え不可');
+        assert(document.getElementById('expEtcModal').textContent.includes('元のETC料金が記録されていない'), '差し替え不可の理由を画面に表示');
+        ExpenseEtc.toggleAll();
+        ExpenseEtc.applyToExpense();
+        assert(legacy.querySelector('.exp-highway').value==='1600' && legacy.querySelector('.exp-highway-count').value==='1', '旧データの高速代と件数は全選択でも維持');
+        ExpenseEtc.closeModal();
         await ExpenseManager.deleteDraft(revisedDraftId);
         output.textContent = checks.join('\n') + '\n完了: ' + checks.length + '項目 PASS（PDFはボタンで別途出力）';
         output.dataset.result = 'pass';

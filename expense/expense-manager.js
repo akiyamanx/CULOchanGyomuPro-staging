@@ -334,7 +334,7 @@ const ExpenseManager = (() => {
             const duplicate=known.some(r=>r.key===record.key||r.aliases?.includes(record.key));
             const candidates=duplicate ? [] : known.filter(r=>ExpenseImport.etcCandidate(r,record))
                 .map(r=>{
-                    const old=ExpenseImport.etcStoredDetails(r,record);
+                    const old=ExpenseImport.etcStoredDetails(r);
                     return {key:r.key,date:old.date,time:old.time,entry:old.entry,exit:old.exit,amount:old.amount,
                         reference:old.reference};
                 });
@@ -365,9 +365,11 @@ const ExpenseManager = (() => {
             }
             const clean={...record};delete clean.review;
             if(old) {
-                const previous=ExpenseImport.etcStoredDetails(old.r,record).amount;
+                const previous=ExpenseImport.etcStoredDetails(old.r).amount;
+                if (previous == null)
+                    throw new Error('元のETC料金が記録されていないため差し替えできません。元の明細を確認してください。');
                 const minimum=s.entries.reduce((sum,r)=>sum+(r===old.r?previous:Number.isSafeInteger(r.amount)?r.amount:0),0);
-                if (old.s!==s || !Number.isSafeInteger(previous) || previous<=0 || s.total<minimum || s.count<s.entries.length)
+                if (old.s!==s || s.total<minimum || s.count<s.entries.length)
                     throw new Error('元の通行が別の日付にあるか、手修正された高速代です。精算行を確認してください。');
                 s.entries.splice(s.entries.indexOf(old.r),1,{...clean,aliases:[...(old.r.aliases||[]),old.r.key]});
                 s.total+=record.amount-previous;amount+=record.amount-previous;replaced++;
