@@ -261,6 +261,16 @@ const DataSync = (() => {
             const ordered = (list, ord) => { const pos = new Map((ord || []).map((k, i) => [k, i])); return list.sort((p, q) => (pos.has(p.key) ? pos.get(p.key) : 1e9) - (pos.has(q.key) ? pos.get(q.key) : 1e9) || String(p.c.createdAt || '').localeCompare(String(q.c.createdAt || '')) || (p.key < q.key ? -1 : 1)); };
             const group = coll => { const by = {}; for (const [key, r] of view[coll]) { if (!alive(r)) continue; const c = plain(r); const ws = key.split('|')[0]; delete c._ws; (by[ws] = by[ws] || []).push({ key, c }); } return by; };
             const routeBy = group('route'), expBy = group('exp');
+            // 最後の1件が消えると生存グループが無くなる。削除の印がある既知の行だけ取り除く。
+            function applyEmptyCollection(coll, storageKey, ws) {
+                const removed = new Set((local.order[coll][ws] || []).filter(key => {
+                    const r = view[coll].get(key);
+                    return r && r.d && !alive(r);
+                }));
+                if (!removed.size) return 0;
+                return write(storageKey, readJson(storageKey, []).filter(row =>
+                    !isObj(row) || row.id == null || !removed.has(ws + '|' + row.id)));
+            }
             for (const ws of Object.keys(routeBy).concat(Object.keys(expBy))) if (!aliveWs.has(ws) && (custBy[ws] || []).length) aliveWs.set(ws, { name: ws });
             const wsIds = [...aliveWs.keys()].sort();
             writes += write('mm_workspaces', wsIds.map(id => ({ id, ...aliveWs.get(id) })));
@@ -274,7 +284,9 @@ const DataSync = (() => {
                 const cs = ordered(custBy[ws] || [], local.order.cust[ws]).map(x => x.c);
                 if (cs.length || S.getItem('mm_customers_' + ws) !== null) writes += write('mm_customers_' + ws, cs);
                 if (routeBy[ws]) writes += write('mm_routes_' + ws, ordered(routeBy[ws], local.order.route[ws]).map(x => x.c));
+                else writes += applyEmptyCollection('route', 'mm_routes_' + ws, ws);
                 if (expBy[ws]) writes += write('mm_expenses_' + ws, expBy[ws].sort((p, q) => String(q.c.createdAt || '').localeCompare(String(p.c.createdAt || '')) || (p.key < q.key ? -1 : 1)).map(x => x.c));
+                else writes += applyEmptyCollection('exp', 'mm_expenses_' + ws, ws);
                 const sg = view.seg.get(ws);
                 if (sg && alive(sg) && sg.f.v && sg.f.v.v !== undefined) writes += write('mm_segments_' + ws, sg.f.v.v);
             }

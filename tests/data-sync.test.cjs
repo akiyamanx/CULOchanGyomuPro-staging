@@ -343,3 +343,71 @@ test('端末間: 日時未記入の訪問を、日時が違う二つの候補の
     await settle(A,B);
     for(const d of [A,B]) assert.deepEqual(ids(d),['am','pm','tbd']);
 });
+
+for (const [kind, coll, row] of [
+    ['routes', 'route', { id: 'route_1', name: '架空ルート', order: [] }],
+    ['expenses', 'exp', { id: 'exp_1', total: 1200 }]
+]) {
+    const key = 'mm_' + kind + '_2026-10';
+    const nextMonth = 'mm_' + kind + '_2026-11';
+    test(kind + ': 最後の1件の削除は3台に伝わり、別の月と訪問先は残る', async () => {
+        const drive = makeDrive();
+        const A = device(ID_A, drive, seedOf({ '2026-10': [cust('c1')] }, { [key]: JSON.stringify([row]), [nextMonth]: JSON.stringify([row]) }));
+        const B = device(ID_B, drive, seedOf({})), C = device(ID_C, drive, seedOf({}));
+        await settle(A, B, C);
+        assert.deepEqual(B.get(key), [row]);
+        assert.deepEqual(C.get(key), [row]);
+        A.tick(1);
+        A.put(key, []);
+        await settle(A, B); // C は古い記録のままオフライン
+        assert.deepEqual(B.get(key), []);
+        B.tick(2);
+        B.cp();
+        C.tick(2);
+        await settle(C, B, A);
+        for (const d of [A, B, C]) {
+            assert.deepEqual(d.get(key), []);
+            assert.deepEqual(d.get(nextMonth), [row]);
+            assert.equal(d.find('c1').id, 'c1');
+        }
+        const published = [...drive.files.values()].map(f => JSON.parse(f.text).recs[coll]['2026-10|' + row.id]);
+        assert.ok(published.every(r => r && r.d && !r.f));
+    });
+    test(kind + ': 明示的な削除が届いても未対応のローカル行は消さない', async () => {
+        const drive = makeDrive();
+        const A = device(ID_A, drive, seedOf({}, { [key]: JSON.stringify([row]) }));
+        const B = device(ID_B, drive, seedOf({}));
+        await settle(A, B);
+        const legacy = { name: '同期IDの無い旧形式の行' };
+        B.put(key, [row, legacy]);
+        A.tick(1);
+        A.put(key, []);
+        await settle(A, B);
+        assert.deepEqual(B.get(key), [legacy]);
+    });
+}
+test('ルートと精算書の情報が一度もない月には同期で空の保存領域を作らない', async () => {
+    const drive = makeDrive();
+    const A = device(ID_A, drive, seedOf({ '2026-10': [cust('c1')] }));
+    const B = device(ID_B, drive, seedOf({}));
+    await settle(A, B);
+    assert.equal(B.store.has('mm_routes_2026-10'), false);
+    assert.equal(B.store.has('mm_expenses_2026-10'), false);
+});
+
+test('0件になった端末と同じ月に新規追加した端末: 新規のルートと精算書は残る', async () => {
+    const drive = makeDrive();
+    const route = 'mm_routes_2026-10', exp = 'mm_expenses_2026-10';
+    const oldRoute = { id: 'route_1', name: '架空ルート' }, oldExpense = { id: 'exp_1', total: 1200 };
+    const newRoute = { id: 'route_2', name: '新しい架空ルート' }, newExpense = { id: 'exp_2', total: 800 };
+    const A = device(ID_A, drive, seedOf({}, { [route]: JSON.stringify([oldRoute]), [exp]: JSON.stringify([oldExpense]) }));
+    const B = device(ID_B, drive, seedOf({}));
+    await settle(A, B);
+    A.tick(1); A.put(route, []); A.put(exp, []);
+    B.tick(2); B.put(route, [oldRoute, newRoute]); B.put(exp, [oldExpense, newExpense]);
+    await settle(A, B);
+    for (const d of [A, B]) {
+        assert.deepEqual(d.get(route), [newRoute]);
+        assert.deepEqual(d.get(exp), [newExpense]);
+    }
+});
