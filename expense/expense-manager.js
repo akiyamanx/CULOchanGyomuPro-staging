@@ -598,7 +598,7 @@ const ExpenseManager = (() => {
         _draftBusy = true;
         try {
             const parkingReceipts = await ExpenseDraftReceipts.capture();
-            const etcEvidence = typeof EtcWorkflow !== 'undefined' ? await EtcWorkflow.capture() : null;
+            const etcEvidence = typeof EtcWorkflow !== 'undefined' ? await EtcWorkflow.captureForDraft() : null;
             const header = getHeaderData();
             const previous = options.asCopy ? null : _activeDraft;
             const now = Math.max(Date.now(), (previous?.updatedAt || 0) + 1);
@@ -610,6 +610,7 @@ const ExpenseManager = (() => {
             };
             await ExpenseDraftStore.save(draft, previous);
             selectDraftForEditing(draft);
+            if (typeof EtcWorkflow !== 'undefined') EtcWorkflow.markDraftSaved(etcEvidence);
             ExpenseDraftReceipts.load(parkingReceipts);
             await renderDraftList();
             alert('✅ 精算書と領収書 ' + parkingReceipts.items.length + '枚' + (etcEvidence?.records?.length ? '・ETC ' + etcEvidence.records.length + '件' : '') + (previous ? 'で、この下書きを更新しました。' : 'を下書きに保存しました。'));

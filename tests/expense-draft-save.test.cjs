@@ -10,7 +10,7 @@ function setup() {
         document:{getElementById:id=>buttons[id],querySelectorAll:()=>[]},
         alert:()=>{}, confirm:()=>true,
         ExpenseDraftReceipts:{capture:async()=>({items:[{id:'photo'}]}),load:()=>{},reset:()=>{}},
-        EtcWorkflow:{capture:async()=>({records:[{id:'etc'}]}),leaveDraft:()=>{}},
+        EtcWorkflow:{markDraftSaved:()=>{},captureForDraft:async()=>({records:[{id:'etc'}]}),leaveDraft:()=>{}},
         ExpenseDraftStore:{
             save:async draft=>records.set(draft.id,draft),
             remove:async id=>records.delete(id)

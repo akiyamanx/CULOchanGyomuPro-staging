@@ -14,7 +14,7 @@
 <script>
 const AppProfile = {dbName: name => 'QA-Only-' + name};
 let etcFixture = null;
-const EtcWorkflow = {capture: async () => etcFixture, beforeLoad: async () => {}, load: value => { etcFixture = value; }, isManaged: () => false, assertSynced: () => {}, leaveDraft: () => { etcFixture = null; }};
+const EtcWorkflow = {markDraftSaved: () => {}, captureForDraft: async () => etcFixture, beforeLoad: async () => {}, load: value => { etcFixture = value; }, isManaged: () => false, assertSynced: () => {}, leaveDraft: () => { etcFixture = null; }};
 const ParkingDocument = {captionReady: () => true};
 const fixture = {
     customers:[{id:'a',routeId:'route_1',company:'検証株式会社',address:'千葉県千葉市中央区中央1-1',appoDate:'2026-10-08T09:00',status:'appointed'}, {id:'b',routeId:'route_1',company:'架空メンテナンス',address:'東京都江東区夢の島2-2',appoDate:'2026-10-09T10:00',status:'appointed'}],
@@ -25,5 +25,5 @@ const DataStorage = {getCustomers:()=>fixture.customers,getRoutes:()=>fixture.ro
 const ParkingManager = {getItems:()=>fixture.parking,getSelectedItems:()=>[],snapshotSelected:async()=>fixture.attachments || []};
 const AppCore = {switchTab:name=>document.getElementById('testResults').dataset.tab=name,showLoading:message=>{document.getElementById('loading').style.display='block';document.getElementById('loadingText').textContent=message;},hideLoading:()=>document.getElementById('loading').style.display='none'};
 </script>
-<script src="../expense/expense-import.js?v=20261121-etc-legacy-1"></script><script src="../shared/pdf-renderer.js"></script><script src="../expense/expense-draft-store.js?v=20261122-draft-update-1"></script><script src="../expense/expense-draft-receipts.js?v=20261122-draft-update-1"></script><script src="../expense/expense-manager.js?v=20261122-draft-update-1"></script><script src="../expense/expense-etc.js?v=20261121-etc-legacy-1"></script><script src="../expense/expense-pdf.js"></script><script src="../map/route-list-pdf.js"></script><script src="../map/route-manager.js"></script><script src="../map/map-expense-form.js?v=20261122-safety-1"></script><script src="expense-browser-tests.js?v=20261122-draft-update-1"></script>
+<script src="../expense/expense-import.js?v=20261121-etc-legacy-1"></script><script src="../shared/pdf-renderer.js"></script><script src="../expense/expense-draft-store.js?v=20261122-draft-update-1"></script><script src="../expense/expense-draft-receipts.js?v=20261122-draft-update-1"></script><script src="../expense/expense-manager.js?v=20261122-draft-etc-guard-1"></script><script src="../expense/expense-etc.js?v=20261121-etc-legacy-1"></script><script src="../expense/expense-pdf.js"></script><script src="../map/route-list-pdf.js"></script><script src="../map/route-manager.js"></script><script src="../map/map-expense-form.js?v=20261122-safety-1"></script><script src="expense-browser-tests.js?v=20261122-draft-update-1"></script>
 
