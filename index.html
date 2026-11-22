@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="styles/parking.css">
     <link rel="stylesheet" href="styles/parking-workflow.css?v=20261121-3">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600&display=swap">
-    <link rel="stylesheet" href="styles/map/map-styles.css?v=20261122-route-pins-1">
+    <link rel="stylesheet" href="styles/map/map-styles.css?v=20261122-route-pins-2">
     <link rel="stylesheet" href="styles/map/map-expense-styles.css">
     <link rel="stylesheet" href="styles/map/route-order-styles.css">
     <link rel="stylesheet" href="styles/map/workspace-styles.css?v=20261117-1">
@@ -295,9 +295,9 @@
                     </div>
                 </section>
                 <section class="map-region" aria-label="訪問先の地図">
-                    <div class="map-region-header"><div><h3>地図から訪問先を選ぶ</h3><p class="visit-help">ピン → 電話・日時・備考 → ルートへ</p></div><div class="map-view-actions"><button class="btn btn-secondary" id="mapListButton" aria-expanded="false" aria-controls="bottomPanel" hidden>訪問先・ルート</button><button class="compact-legend-btn" onclick="toggleLegend()">ピンの説明</button><button class="btn btn-primary" id="mapExpandButton" aria-expanded="false" aria-controls="visitLayout">地図を大きく</button></div></div>
+                    <div class="map-region-header"><div><h3>地図から訪問先を選ぶ</h3><p class="visit-help">ピン → 電話・日時・備考 → ルートへ</p><p class="map-visit-view" id="mapVisitView" role="status">未完了</p></div><div class="map-view-actions"><button class="btn btn-secondary" id="mapListButton" aria-expanded="false" aria-controls="bottomPanel" hidden>訪問先・ルート</button><button type="button" class="btn btn-secondary map-completed-btn" id="mapCompletedButton" aria-pressed="false" aria-controls="map customerList" onclick="MapCore.toggleCompleted()">完了した訪問を見る（0）</button><button class="compact-legend-btn" onclick="toggleLegend()">ピンの説明</button><button class="btn btn-primary" id="mapExpandButton" aria-expanded="false" aria-controls="visitLayout">地図を大きく</button></div></div>
                     <div class="map-canvas"><div id="map"></div><div class="map-setup" id="mapSetup"><span class="map-placeholder-icon" aria-hidden="true">⌖</span><h4>地図を使う準備</h4><p id="mapSetupMessage">設定でGoogle Maps APIキーと会社住所を登録すると、地図と距離計算が使えます。</p><button class="btn btn-secondary compact-action" onclick="AppCore.openSettings('maps')">地図の設定を開く</button><p class="map-setup-hint">訪問先の登録・編集は、先に進められます。</p></div></div>
-                    <div class="legend" id="legend" style="display:none;"><div class="legend-title">ピンの色・形・番号 <button class="legend-close" onclick="toggleLegend()" aria-label="ピンの説明を閉じる">✕</button></div><div id="legendItems"></div></div>
+                    <div class="legend" id="legend" style="display:none;"><div class="legend-title">ピンの色・形・日付 <button class="legend-close" onclick="toggleLegend()" aria-label="ピンの説明を閉じる">✕</button></div><div id="legendItems"></div></div>
                 </section>
             </div>
             <div class="next-action"><div><strong>訪問が終わったら、交通費を記録</strong><p>駐車場の領収書をその場で追加できます。</p></div><button class="btn btn-secondary compact-action" onclick="WorkflowUI.openParking()">駐車場の領収書を追加 →</button><button class="text-link" onclick="WorkflowUI.openRouteImport()">走行距離を精算する →</button></div>
@@ -444,7 +444,7 @@
     <script src="expense/receipt-crop-editor.js?v=20261121-3"></script>
     <script src="expense/parking-scan.js?v=20261121-3"></script>
     <script src="expense/parking-pdf.js?v=20261019-7"></script>
-    <script src="map/map-data-storage.js?v=20261117-2"></script>
+    <script src="map/map-data-storage.js?v=20261122-route-pins-2"></script>
     <script src="map/v1-converter.js"></script>
     <script src="map/request-parser.js?v=20261119-date-review-1"></script>
     <script src="map/request-reader.js?v=20261030-3"></script>
@@ -465,15 +465,15 @@
     <script src="map/mail-box-ui.js?v=20261120-gmail-partial-1-20261122-safety-1"></script>
     <script src="map/request-import.js?v=20261119-date-review-1"></script>
     <script src="map/geocode-guard.js?v=20261104-3"></script>
-    <script src="map/route-pin-style.js?v=20261122-route-pins-1"></script>
-    <script src="map/map-core.js?v=20261122-route-pins-1"></script>
+    <script src="map/route-pin-style.js?v=20261122-route-pins-2"></script>
+    <script src="map/map-core.js?v=20261122-route-pins-2"></script>
     <script src="map/google-calendar-data.js?v=20261019-13"></script>
     <script src="map/google-visit-calendar.js?v=20261019-14"></script>
     <script src="map/visit-planner.js?v=20261121-5"></script>
     <script src="map/map-workspace.js?v=20261019-11"></script>
     <script src="map/route-list-pdf.js"></script>
     <script src="map/result-map.js?v=20261105-3"></script>
-    <script src="map/route-manager.js?v=20261122-route-pins-1"></script>
+    <script src="map/route-manager.js?v=20261122-route-pins-2"></script>
     <script src="map/map-expense-form.js?v=20261122-safety-1"></script>
     <script src="map/route-order.js?v=20261104-1"></script>
     <script src="map/ic-kanto.js?v=20261104-1"></script>

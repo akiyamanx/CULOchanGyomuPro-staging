@@ -14,6 +14,50 @@ const MapCore = (() => {
     let infoWindow = null;
     let geocoder = null;
     let currentEditId = null;
+    let completedOnly = false;
+    let displayWorkspace;
+    const workspace = () => DataStorage.getCurrentWorkspaceId?.();
+    const visible = c => RoutePinStyle.visible(c,completedOnly);
+    function syncMapWorkspace() {
+        const id=workspace();
+        if(displayWorkspace!==id) { displayWorkspace=id; completedOnly=false; }
+    }
+    function updateMapFilter(customers) {
+        const count=customers.filter(c=>c.status==='completed').length;
+        const button=document.getElementById('mapCompletedButton');
+        if(button) {
+            button.textContent='完了した訪問を見る（'+count+'）';
+            button.setAttribute('aria-pressed',String(completedOnly));
+        }
+        const message=document.getElementById('mapVisitView');
+        if(message) {
+            const text=completedOnly ? '完了のみ · '+count+'件' : '未完了 · '+(customers.length-count)+'件';
+            if(message.textContent!==text)message.textContent=text;
+        }
+    }
+    function fitVisibleMarkers() {
+        const shown=markers.filter(m=>visible(m.customData));
+        if(!map || !shown.length)return;
+        const bounds=new google.maps.LatLngBounds();
+        shown.forEach(m=>bounds.extend(m.getPosition()));
+        map.fitBounds(bounds,{padding:50});
+    }
+    function setCompletedMode(next,{fit=true}={}) {
+        if(completedOnly===next)return;
+        completedOnly=next;
+        infoWindow?.close();
+        document.getElementById('listPickCard')?.remove();
+        markers.forEach(m=>m.setVisible(visible(m.customData)));
+        updateCustomerList();
+        const shown=markers.some(m=>visible(m.customData));
+        if(fit && shown)fitVisibleMarkers();
+        const ws=workspace();
+        const locating=locateMissing(viewCustomers().filter(visible));
+        if(fit && !shown)locating.then(result=>{
+            if(result.ok && completedOnly===next && workspace()===ws)fitVisibleMarkers();
+        });
+    }
+    function toggleCompleted() { setCompletedMode(!completedOnly); }
     // 地図のキーが無効・未設定だと geocode の返事が来ず「処理中」が回り続けたため、見張り役を通す。
     const guard = GeocodeGuard.create({ timeoutMs: 8000 });
     const viewCustomers = () => (typeof DataStorage.getViewCustomers === "function" ? DataStorage.getViewCustomers() : DataStorage.getCustomers());
@@ -29,6 +73,7 @@ const MapCore = (() => {
     function mapFailed(why) { guard.markFailed(why); showMapNotice(); }
 
     function initMap() {
+        syncMapWorkspace();
         const settings = DataStorage.getSettings();
         const defaultCenter = { lat: 35.6939, lng: 139.7535 };
 
@@ -70,36 +115,18 @@ const MapCore = (() => {
     function plotAllMarkers(customers) {
         clearMarkers();
         const cache = DataStorage.getGeoCache();
-        const bounds = new google.maps.LatLngBounds();
-        let hasValidMarker = false;
         const uncached = [];
-
-        for (const customer of customers) {
-            const cached = cache[customer.address];
-            if (cached) {
-                const latLng = new google.maps.LatLng(cached.lat, cached.lng);
-                createMarker(customer, latLng);
-                bounds.extend(latLng);
-                hasValidMarker = true;
-            } else if (customer.lat && customer.lng) {
-                const latLng = new google.maps.LatLng(customer.lat, customer.lng);
-                createMarker(customer, latLng);
-                bounds.extend(latLng);
-                hasValidMarker = true;
-                if (customer.address) {
-                    DataStorage.setGeoCache(customer.address, { lat: customer.lat, lng: customer.lng });
+        for (const c of customers) {
+            const position = cache[c.address] || (c.lat && c.lng && c);
+            if (position) {
+                createMarker(c,new google.maps.LatLng(position.lat,position.lng));
+                if (!cache[c.address] && c.address) {
+                    DataStorage.setGeoCache(c.address,{lat:c.lat,lng:c.lng});
                 }
-            } else if (customer.address) {
-                uncached.push(customer);
-            }
+            } else if (c.address && visible(c)) uncached.push(c);
         }
-
-        if (uncached.length > 0) {
-            geocodeAndPlot(uncached);
-        }
-        if (hasValidMarker) {
-            map.fitBounds(bounds, { padding: 50 });
-        }
+        if (uncached.length) geocodeAndPlot(uncached);
+        fitVisibleMarkers();
     }
 
     async function geocodeAndPlot(customers) {
@@ -116,21 +143,18 @@ const MapCore = (() => {
         loading.style.display = 'flex';
         try {
 
-        const bounds = new google.maps.LatLngBounds();
-        markers.forEach(m => bounds.extend(m.getPosition()));
 
         let completed = 0;
         const total = customers.length;
 
         for (const customer of customers) {
-            if (!customer.address) { completed++; continue; }
+            if (!customer.address || !visible(customer)) { completed++; continue; }
             progress.textContent = `${completed + 1} / ${total}`;
 
             const cache = DataStorage.getGeoCache();
             if (cache[customer.address]) {
                 const latLng = new google.maps.LatLng(cache[customer.address].lat, cache[customer.address].lng);
-                createMarker(customer, latLng);
-                bounds.extend(latLng);
+                createCurrentMarker(customer,latLng);
                 completed++;
                 continue;
             }
@@ -139,8 +163,7 @@ const MapCore = (() => {
                 const latLng = await guard.run(() => geocodeAddressAsync(customer.address));
                 if (latLng) {
                     DataStorage.setGeoCache(customer.address, { lat: latLng.lat(), lng: latLng.lng() });
-                    createMarker(customer, latLng);
-                    bounds.extend(latLng);
+                    createCurrentMarker(customer,latLng);
                     DataStorage.updateCustomer(customer.id, { lat: latLng.lat(), lng: latLng.lng() });
                 }
             } catch (err) {
@@ -154,7 +177,7 @@ const MapCore = (() => {
             loading.style.display = 'none';
         }
         if (guard.failed()) showMapNotice();
-        else if (markers.length > 0) { map.fitBounds(bounds, { padding: 50 }); }
+        else fitVisibleMarkers();
         updateCountBadge();
         updateCustomerList();
         RouteManager.updateRoutePanel();
@@ -197,21 +220,25 @@ const MapCore = (() => {
     const markerRoutes = () => (DataStorage.isUndatedCombinedView?.() ? [] : DataStorage.getRoutes());
     function markerTitle(customer,routes) {
         const route=routes.find(r=>r.id===customer.routeId);
-        return [customer.company || '不明',RoutePinStyle.statusLabel(customer.status),route?.name].filter(Boolean).join(' · ');
+        return [customer.company || '不明',RoutePinStyle.statusLabel(customer.status),RoutePinStyle.visitDay(customer)?.iso,route?.name].filter(Boolean).join(' · ');
     }
     function createMarker(customer, latLng) {
         const routes = markerRoutes();
-        let label = customer.company || '不明';
-        if (customer.unitCount && customer.unitCount > 1) label += `（${customer.unitCount}台）`;
         const marker = new google.maps.Marker({
-            position:latLng,map,icon:RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes),google.maps),
-            title:markerTitle(customer,routes),
-            label:{text:label,color:'#1e293b',fontSize:'11px',fontWeight:'600',fontFamily:'Noto Sans JP, sans-serif',className:'marker-label'}
+            position:latLng,map,visible:visible(customer),
+            icon:RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,workspace()),google.maps),
+            title:markerTitle(customer,routes)
         });
         marker.customData=customer;
-        marker.addListener('click', () => showInfoWindow(marker,marker.customData));
+        marker.addListener('click', () => { if(visible(marker.customData))showInfoWindow(marker,marker.customData); });
         markers.push(marker);
         return marker;
+    }
+
+    // 測位結果が戻る間に月やアポ状態が変わっても、古い表示を地図に混ぜない。
+    function createCurrentMarker(customer, position) {
+        const current=viewCustomers().find(c=>c.id===customer.id && c.address===customer.address);
+        if(current && !markers.some(m=>m.customData.id===current.id))createMarker(current,position);
     }
 
     // 吹き出しと情報カードで共通の詳細行(customer は文字列をエスケープ済みのコピー)
@@ -282,7 +309,10 @@ const MapCore = (() => {
         if (!marker) return;
         const routes = markerRoutes();
         marker.customData=customer;
-        marker.setIcon(RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes),google.maps));
+        marker.setIcon(RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,workspace()),google.maps));
+        marker.setVisible(visible(customer));
+        if(!visible(customer))infoWindow?.close();
+        updateCustomerList();
         marker.setTitle(markerTitle(customer,routes));
     }
 
@@ -292,11 +322,17 @@ const MapCore = (() => {
     }
 
     function updateCustomerList() {
-        const customers = viewCustomers();
+        const all = viewCustomers();
+        updateMapFilter(all);
+        const customers=all.filter(visible);
         const routes = DataStorage.getRoutes();
         const listEl = document.getElementById('customerList');
         const combined = typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView();
         if (customers.length === 0) {
+            if(completedOnly || all.length) {
+                listEl.innerHTML='<div class="empty-msg">'+(completedOnly?'この表示範囲に完了した訪問はありません。':'この表示範囲に未完了の訪問はありません。地図上の「完了した訪問を見る」で確認できます。')+'</div>';
+                return;
+            }
             listEl.innerHTML = combined
                 ? '<div class="empty-msg"><strong>日付が決まっていない訪問はありません</strong><br>各月で訪問日が入っているものは、その月を開くと見られます。</div>'
                 : '<div class="empty-msg"><strong>この月の訪問先はまだありません</strong><br>「訪問先を追加」か「Excel・依頼書を取り込む」で<br>準備を始めましょう。</div>';
@@ -310,7 +346,7 @@ const MapCore = (() => {
             const status = statuses[c.status] ? c.status : 'pending';
             const undated = typeof DataStorage.hasVisitDate === 'function' ? !DataStorage.hasVisitDate(c) : !c.appoDate;
             html += `<button type="button" class="customer-item" data-customer-id="${esc(c.id)}">`;
-            html += `${RoutePinStyle.swatch(RoutePinStyle.visitStyle(c,combined ? [] : routes))}`;
+            html += `${RoutePinStyle.swatch(RoutePinStyle.visitStyle(c,combined ? [] : routes,workspace()))}`;
             html += `<span class="customer-info">`;
             html += `<span class="customer-name">${esc(c.company || '不明')}`;
             if (c.managementNo) html += ` <small>${esc(c.managementNo)}</small>`;
@@ -364,6 +400,8 @@ const MapCore = (() => {
         window.scrollTo({ top: Math.max(0, scrollY + r.top - want), behavior: reduce ? 'auto' : 'smooth' });
     }
     function focusMarker(customerId) {
+        const picked=viewCustomers().find(c=>c.id===customerId);
+        if(picked && !visible(picked))setCompletedMode(picked.status==='completed',{fit:false});
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
         markSelected(customerId);
         if (marker) {
@@ -447,6 +485,7 @@ const MapCore = (() => {
     }
 
     function refreshAllMarkers() {
+        syncMapWorkspace();
         const customers = viewCustomers();
         clearMarkers();
         if (!map) { updateCountBadge(); updateCustomerList(); return; }
@@ -459,7 +498,7 @@ const MapCore = (() => {
         updateCountBadge();
         updateCustomerList();
         // Gmail取り込み・同期・月切替の後も、位置が無い訪問先は裏で位置を取る
-        locateMissing(customers);
+        locateMissing(customers.filter(visible));
     }
 
     function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -483,7 +522,7 @@ const MapCore = (() => {
         if (!latLng) { if (guard.failed()) return 'nomap'; locateTried.add(customer.address); return 'none'; }
         DataStorage.setGeoCache(customer.address, { lat: latLng.lat(), lng: latLng.lng() });
         DataStorage.updateCustomer(customer.id, { lat: latLng.lat(), lng: latLng.lng() });
-        if (!markers.some(m => m.customData && m.customData.id === customer.id)) createMarker({ ...customer, lat: latLng.lat(), lng: latLng.lng() }, latLng);
+        createCurrentMarker(customer,latLng);
         return 'ok';
     }
     // まとめて取る（画面は止めない）。試して見つからなかった住所はこの起動中は飛ばす
@@ -524,7 +563,7 @@ const MapCore = (() => {
         initMap, mapFailed, geocodeAndPlot, plotAllMarkers, clearMarkers,
         createMarker, updateMarkerColor, focusMarker,
         openEdit, refreshAllMarkers, locateMissing, locateAndFocus,
-        updateCountBadge, updateCustomerList,
+        updateCountBadge, updateCustomerList, toggleCompleted,
         getCurrentEditId: () => currentEditId,
         getMap: () => map, getMarkers: () => markers
     };

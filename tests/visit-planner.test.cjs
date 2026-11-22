@@ -35,7 +35,7 @@ test('ピンを押すと安全な会社名・別々の電話リンク・日時�
     let content='',click;
     const nodes=new Map();
     const context=vm.createContext({console,GeocodeGuard:require('../map/geocode-guard'),VisitPlanner:Planner,ExpenseImport:require('../expense/expense-import'),
-        document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',innerHTML:'',hidden:false});return nodes.get(id);}},
+        document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',innerHTML:'',hidden:false,setAttribute(){}});return nodes.get(id);}},
         DataStorage:{getSettings:()=>({}),getCustomers:()=>[],getRoutes:()=>[]},RouteManager:{updateRoutePanel:()=>{}},
         google:{maps:{Map:class{},Geocoder:class{},InfoWindow:class{setContent(html){content=html;}open(){}},
             Point:class{},Size:class{},Marker:class{addListener(name,callback){click=callback;}}}}

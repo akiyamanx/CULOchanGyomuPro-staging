@@ -14,7 +14,7 @@ test('未アポはルート割当済みでも黒旗、アポ後は同じ番号�
   const flag=pins.visitStyle(c,routes);
   assert.deepEqual(flag,{shape:'flag',color:'#171a22',mark:'8'});
   assert.equal(pins.visitStyle({...c,status:'pending'},routes).shape,'flag');
-  assert.deepEqual(pins.visitStyle({...c,status:'appointed'},routes),pins.routeStyle(routes[7],routes));
+  assert.deepEqual(pins.visitStyle({...c,status:'appointed'},routes),{...pins.routeStyle(routes[7],routes),mark:'R8'});
   assert.notEqual(pins.visitStyle({status:'completed'},routes).shape,pins.visitStyle({status:'appointed'},routes).shape);
 });
 test('保存済みの色は保ち、SVGに任意の文字列を入れない',()=>{

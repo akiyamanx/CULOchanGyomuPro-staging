@@ -50,16 +50,21 @@ const RouteManager = (() => {
     function updateRoutePanel() {
         const routeEl = document.getElementById('routeManager');
         if (typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView()) {
-            updateLegend([], DataStorage.getViewCustomers?.() || []);
+            updateLegend(DataStorage.getViewCustomers?.() || []);
             routeEl.innerHTML = '<p class="empty-msg">日付が決まっていない訪問を全部の月から見ています。月をまたぐため、ここではルート作成・距離計算はできません。ルートを組むときは、対象月でその月を選んでください。</p>';
             return;
         }
         const routes = DataStorage.getRoutes();
         const customers = DataStorage.getCustomers();
-        let html = '';
+        let html = '', unused = '', unusedCount = 0;
 
         for (const route of routes) {
             const members = customers.filter(c => c.routeId === route.id);
+            if (!members.length) {
+                unusedCount++;
+                unused += '<li>'+RoutePinStyle.swatch(RoutePinStyle.routeStyle(route,routes))+' '+esc(route.name)+'</li>';
+                continue;
+            }
             if (route.order && route.order.length > 0) {
                 members.sort((a, b) => {
                     const ai = route.order.indexOf(a.id);
@@ -109,8 +114,9 @@ const RouteManager = (() => {
             html += `</div></div>`;
         }
 
+        if(unusedCount)html+='<details class="unused-routes"><summary>未使用のルート（'+unusedCount+'）</summary><p>訪問先の編集画面で割り当てられます。</p><ul>'+unused+'</ul></details>';
         routeEl.innerHTML = html || '<p class="empty-msg">まだルートが設定されていません</p>';
-        updateLegend(routes, customers);
+        updateLegend(customers);
     }
 
     function toggleRouteSection(header) {
@@ -118,17 +124,22 @@ const RouteManager = (() => {
         if (stops) { stops.style.display = stops.style.display === 'none' ? 'block' : 'none'; }
     }
 
-    function updateLegend(routes, customers) {
+    function updateLegend(customers) {
         const itemsEl = document.getElementById('legendItems');
         if (!itemsEl) return;
         const item=(style,label)=>`<div class="legend-item">${RoutePinStyle.swatch(style)}<span>${esc(label)}</span></div>`;
-        const status = item(RoutePinStyle.statusStyle('pending'),'未アポ（旗の数字は割当て済みルート）')
-            + item(RoutePinStyle.statusStyle('appointed'),'アポ済み・ルートなし')
-            + item(RoutePinStyle.statusStyle('completed'),'完了・ルートなし');
-        const activeRoutes=routes.filter(r=>customers.some(c=>c.routeId===r.id));
-        itemsEl.innerHTML=status+(activeRoutes.length
-            ? '<hr class="legend-divider">'+activeRoutes.map(r=>item(RoutePinStyle.routeStyle(r,routes),r.name)).join('')
-            : '');
+        const status = item(RoutePinStyle.statusStyle('pending'),'未アポ（添えた数字はルート番号）')
+            + item(RoutePinStyle.statusStyle('appointed'),'アポ済み・日付なし（R付きはルート番号）')
+            + item(RoutePinStyle.statusStyle('completed'),'訪問完了（完了表示のみ）');
+        const month=DataStorage.getCurrentWorkspaceId?.();
+        const dates=new Map();
+        for(const c of customers) {
+            const date=c.status==='appointed' && RoutePinStyle.visitDay(c);
+            if(date)dates.set(date.iso,c);
+        }
+        const samples=[...dates].sort(([a],[b])=>a.localeCompare(b)).map(([iso,c])=>item(RoutePinStyle.visitStyle(c,[],month),iso.slice(5).replace('-','/')));
+        itemsEl.innerHTML=status+'<hr class="legend-divider"><p class="legend-help">数字は訪問開始日。対象月と違う日は「月/日」で表示します。</p>'
+            +(samples.length ? '<div class="legend-date-grid">'+samples.join('')+'</div>' : item(RoutePinStyle.dayStyle(3),'例：3日'));
     }
 
     function drawRouteLines() {
