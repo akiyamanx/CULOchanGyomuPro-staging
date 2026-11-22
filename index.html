@@ -448,11 +448,11 @@
     <script src="map/request-reader.js?v=20261030-3"></script>
     <script src="map/request-month.js?v=20261028-1"></script>
     <script src="map/request-classifier.js?v=20261030-3"></script>
-    <script src="map/mf-dedupe.js?v=20261030-5"></script>
+    <script src="map/mf-dedupe.js?v=20261122-visit-conflict-1"></script>
     <script src="map/mail-box.js?v=20261119-date-review-1"></script>
     <script src="map/mail-ledger-sync.js?v=20261122-safety-1"></script>
     <script src="map/mail-ledger-drive.js?v=20261122-safety-1"></script>
-    <script src="map/data-sync.js?v=20261122-safety-1"></script>
+    <script src="map/data-sync.js?v=20261122-visit-conflict-1"></script>
     <script src="map/gmail-transport.js?v=20261117-3"></script>
     <script src="map/gmail-source.js?v=20261120-gmail-partial-1"></script>
     <script src="map/gmail-import.js?v=20261120-gmail-partial-1"></script>
@@ -536,7 +536,7 @@
                         var note = document.createElement('div');
                         note.setAttribute('role', 'status');
                         note.style.cssText = 'background:#ecfdf5;color:#065f46;font:14px/1.5 sans-serif;padding:8px 12px;border-bottom:1px solid #a7f3d0;';
-                        note.textContent = '同じ本体番号(MF)の重複を' + dd.removed + '件まとめました。' + (dd.kept ? 'ルートや日時が入っている' + dd.kept + '件は消さずに残しています(一覧で確認してください)。' : '');
+                        note.textContent = '同じ本体番号(MF)の重複を' + dd.removed + '件まとめました。' + (dd.kept ? '日時・メモが違うなど、同じ訪問と確認できない' + dd.kept + '件は消さずに残しています(一覧で確認してください)。' : '');
                         note.addEventListener('click', function() { note.remove(); });
                         document.body.insertBefore(note, document.body.children[1] || null);
                     }

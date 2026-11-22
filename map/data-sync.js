@@ -211,17 +211,16 @@ const DataSync = (() => {
         // MF番号が同じで別IDの訪問先(両端末でそれぞれ取り込んだもの)。利用者の入力が無い方だけをまとめる。
         const UNSCH = 'unscheduled';
         const val = (r, n) => r.f[n] ? r.f[n].v : undefined;
-        const day = v => String(v || '').slice(0, 10);
         const score = r => (val(r, '_ws') !== UNSCH && val(r, 'appoDate') ? 4 : 0) + (val(r, 'routeId') ? 2 : 0) + ((val(r, 'status') || 'pending') !== 'pending' ? 2 : 0) + (val(r, 'appoDate') ? 1 : 0);
-        const removable = (d, keep) => val(keep, 'status') !== 'completed' && !val(d, 'routeId') && (val(d, 'status') || 'pending') === 'pending' && (!val(d, 'appoDate') || day(val(d, 'appoDate')) === day(val(keep, 'appoDate')));
-        const FILL = ['phone', 'contact', 'branch', 'equipType', 'filter', 'purpose', 'address', 'note'];
+        const visit = r => Object.fromEntries(Object.entries(r.f).map(([name, field]) => [name, field.v]));
+        const FILL = ['phone', 'contact', 'branch', 'equipType', 'filter', 'purpose', 'address'];
         function mfMerge(view, fromRemote, now) {
-            if (typeof MfDedupe === 'undefined' || !MfDedupe.mfOf) return 0;
+            if (typeof MfDedupe === 'undefined' || !MfDedupe.visitGroupConflicts || !MfDedupe.removableVisit || !MfDedupe.mergeVisitBlanks) return 0;
             const groups = new Map();
             for (const [key, r] of view.cust) {
                 if (!alive(r)) continue;
                 // 同じ本体でも作業(修理・メンテなど)が違えば別の訪問先なので、まとめない。
-                const mf = MfDedupe.keyOf ? MfDedupe.keyOf({ managementNo: val(r, 'managementNo'), purpose: val(r, 'purpose') }) : MfDedupe.mfOf({ managementNo: val(r, 'managementNo') });
+                const mf = MfDedupe.keyOf({ managementNo: val(r, 'managementNo'), purpose: val(r, 'purpose') });
                 if (!mf) continue;
                 if (!groups.has(mf)) groups.set(mf, []);
                 groups.get(mf).push({ key, r });
@@ -230,10 +229,14 @@ const DataSync = (() => {
             for (const list of groups.values()) {
                 if (list.length < 2 || !list.some(x => fromRemote.has(x.key)) || !list.some(x => !fromRemote.has(x.key))) continue;
                 list.sort((p, q) => score(q.r) - score(p.r) || String(val(p.r, 'createdAt') || '').localeCompare(String(val(q.r, 'createdAt') || '')) || (p.key < q.key ? -1 : 1));
+                // 一件でも明示的な違いがある組では、未入力の控えもどの訪問か確定できないので残す。
+                if (MfDedupe.visitGroupConflicts(list.map(x => visit(x.r)))) continue;
                 const keep = list[0];
                 for (const d of list.slice(1)) {
-                    if (!removable(d.r, keep.r)) continue;
-                    for (const n of FILL) if (empty(val(keep.r, n)) && !empty(val(d.r, n))) keep.r.f[n] = { ...d.r.f[n] };
+                    const target = visit(keep.r), other = visit(d.r);
+                    if (!MfDedupe.removableVisit(other, target)) continue;
+                    const fill = Object.keys(MfDedupe.mergeVisitBlanks(target, other));
+                    for (const n of [...FILL.filter(n => empty(target[n]) && !empty(other[n])), ...fill]) keep.r.f[n] = { ...d.r.f[n] };
                     d.r.d = Math.max(now, maxT(d.r) + 1); merged++;
                 }
             }

@@ -109,8 +109,8 @@ test('移動: 日程未定→月、月→別の月が伝わり、二重になら
 });
 test('MF番号が同じで別ID(両端末で同じ依頼を取り込んだ): 入力の無い方をまとめ、ルート・状態を入れた方を残す', async () => {
     const drive = makeDrive();
-    const A = device(ID_A, drive, seedOf({ '2026-10': [cust('a1', { managementNo: 'MF12345', routeId: 'route_2', status: 'appointed' })] }));
-    const B = device(ID_B, drive, seedOf({ '2026-10': [cust('b1', { managementNo: 'mf-12345', phone: '000-1111-2222' })] }));
+    const A = device(ID_A, drive, seedOf({ '2026-10': [cust('a1', { managementNo: 'MF12345', company:'架空の同じ訪問先',address:'架空の同じ住所', routeId: 'route_2', status: 'appointed' })] }));
+    const B = device(ID_B, drive, seedOf({ '2026-10': [cust('b1', { managementNo: 'mf-12345', company:'架空の同じ訪問先',address:'架空の同じ住所', phone: '000-1111-2222' })] }));
     await settle(A, B);
     for (const d of [A, B]) { const list = d.all().filter(c => /12345/.test(c.managementNo || '')); assert.equal(list.length, 1); assert.equal(list[0].id, 'a1'); assert.equal(list[0].phone, '000-1111-2222'); }
 });
@@ -299,4 +299,47 @@ test('月をまたぐ訪問の終了日時を同期し、明示的な終了日�
         assert.equal(d.find('night').appoDate,start);
         assert.equal(d.find('night').appoEndDate,null);
     }
+});
+
+for (const [what, different] of [
+    ['開始時刻', {appoDate:'2026-11-24T14:00',appoEndDate:'2026-11-24T15:00'}],
+    ['終了時刻', {appoEndDate:'2026-11-24T11:00'}],
+    ['訪問メモ', {note:'裏口から入る'}],
+    ['日程区分', {scheduleKind:'unknown'}],
+    ['訪問先住所', {address:'別の架空の訪問先'}],
+]) test('端末間: 同じMF・作業・日でも'+what+'が違う予定は両端末に残す', async()=>{
+    const drive=makeDrive();
+    const visit={managementNo:'MF900001',company:'架空の同じ訪問先',address:'架空の同じ住所',purpose:'メンテナンス',appoDate:'2026-11-24T09:00',appoEndDate:'2026-11-24T10:00',note:'正面から入る',scheduleKind:'confirmed'};
+    const A=device(ID_A,drive,seedOf({'2026-11':[cust('a1',visit)]}));
+    const B=device(ID_B,drive,seedOf({'2026-11':[cust('b1',{...visit,...different})]}));
+    await settle(A,B);
+    for(const d of [A,B]) {
+        assert.deepEqual(ids(d),['a1','b1']);
+        for(const [key,value] of Object.entries(visit))assert.equal(d.find('a1')[key],value);
+        for(const [key,value] of Object.entries({...visit,...different}))assert.equal(d.find('b1')[key],value);
+    }
+});
+
+test('端末間: 同じ予定・メモの控えは安全にまとめ、片方だけの終了時刻を残す',async()=>{
+    const drive=makeDrive();
+    const visit={managementNo:'MF900002',company:'架空の同じ訪問先',address:'架空の同じ住所',purpose:'点検',appoDate:'2026-11-24T09:00',note:'正面から入る'};
+    const A=device(ID_A,drive,seedOf({'2026-11':[cust('a1',visit)]}));
+    const B=device(ID_B,drive,seedOf({'2026-11':[cust('b1',{...visit,appoEndDate:'2026-11-24T10:00'})]}));
+    await settle(A,B);
+    for(const d of [A,B]) {
+        assert.equal(d.all().length,1);
+        assert.equal(d.all()[0].appoEndDate,'2026-11-24T10:00');
+        assert.equal(d.all()[0].note,'正面から入る');
+    }
+});
+
+test('端末間: 日時未記入の訪問を、日時が違う二つの候補のどちらにも勝手にまとめない', async()=>{
+    const drive=makeDrive();
+    const visit={managementNo:'MF900003',company:'架空の同じ訪問先',address:'架空の同じ住所',purpose:'点検'};
+    const A=device(ID_A,drive,seedOf({'2026-11':[
+        cust('am',{...visit,appoDate:'2026-11-24T09:00'}),cust('pm',{...visit,appoDate:'2026-11-24T14:00'})
+    ]}));
+    const B=device(ID_B,drive,seedOf({unscheduled:[cust('tbd',visit)]}));
+    await settle(A,B);
+    for(const d of [A,B]) assert.deepEqual(ids(d),['am','pm','tbd']);
 });
