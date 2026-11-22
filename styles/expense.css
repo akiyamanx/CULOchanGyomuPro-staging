@@ -373,7 +373,7 @@
 }
 
 /* 下書きの写真は通常の駐車場明細と独立して表示する。 */
-#loadedDraftReceipts[hidden] { display: none; }
+#loadedDraftReceipts[hidden], #expDraftCopy[hidden] { display: none; }
 .draft-choice { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font-size: 14px; font-weight: 600; }
 .draft-choice select { width: 100%; min-width: 0; min-height: 44px; padding: 8px; color: #16324a; background: #fff; border: 1px solid var(--border); border-radius: 6px; font-size: 16px; }
 #expDraftList .exp-draft-item { display: block; }

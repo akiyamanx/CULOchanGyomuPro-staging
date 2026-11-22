@@ -12,6 +12,7 @@ const ExpenseManager = (() => {
     let _rowCount = 0;
     const acceptedDates = new WeakMap();
     let _draftBusy = false, _draftRenderVersion = 0, _parkingBusy = false;
+    let _activeDraft = null;
 
     // ==========================================
     // 初期化
@@ -581,23 +582,37 @@ const ExpenseManager = (() => {
     // ==========================================
     // 下書き保存・読込・削除
     // ==========================================
-    async function saveDraft() {
+    function selectDraftForEditing(draft) {
+        _activeDraft = draft && {id:draft.id, createdAt:draft.createdAt || Number(draft.id) || 0, updatedAt:draft.updatedAt || 0};
+        const save = document.getElementById('expDraftSave');
+        const copy = document.getElementById('expDraftCopy');
+        const hint = document.getElementById('expDraftSaveHint');
+        if (save) save.textContent = _activeDraft ? 'この下書きを更新' : '下書きを新規保存';
+        if (copy) copy.hidden = !_activeDraft;
+        if (hint) hint.textContent = _activeDraft
+            ? '「この下書きを更新」では件数は増えません。元の内容も残したいときだけ、別の下書きとして保存できます。'
+            : '精算書と選んだ領収書・ETCの確認内容をまとめて保存します。';
+    }
+    async function saveDraft(options = {}) {
         if (_draftBusy) return;
         _draftBusy = true;
         try {
             const parkingReceipts = await ExpenseDraftReceipts.capture();
             const etcEvidence = typeof EtcWorkflow !== 'undefined' ? await EtcWorkflow.capture() : null;
             const header = getHeaderData();
+            const previous = options.asCopy ? null : _activeDraft;
+            const now = Math.max(Date.now(), (previous?.updatedAt || 0) + 1);
             const draft = {
-                id: 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2,9),
-                createdAt: Date.now(), version: 2, date: new Date().toLocaleString('ja-JP'),
+                id: previous?.id ?? ('draft_' + now + '_' + Math.random().toString(36).slice(2,9)),
+                createdAt: previous?.createdAt || now, updatedAt: now, version: 2, date: new Date(now).toLocaleString('ja-JP'),
                 ...header, destination: header.destCompany || header.destAddress,
                 rows: getRowsData(), parkingReceipts, etcEvidence
             };
-            await ExpenseDraftStore.save(draft);
+            await ExpenseDraftStore.save(draft, previous);
+            selectDraftForEditing(draft);
             ExpenseDraftReceipts.load(parkingReceipts);
             await renderDraftList();
-            alert('✅ 精算書と領収書 ' + parkingReceipts.items.length + '枚' + (etcEvidence?.records?.length ? '・ETC ' + etcEvidence.records.length + '件' : '') + 'を下書きに保存しました。');
+            alert('✅ 精算書と領収書 ' + parkingReceipts.items.length + '枚' + (etcEvidence?.records?.length ? '・ETC ' + etcEvidence.records.length + '件' : '') + (previous ? 'で、この下書きを更新しました。' : 'を下書きに保存しました。'));
             return draft.id;
         } catch(error) { alert('下書きを保存できませんでした。入力内容は画面に残っています。\n' + error.message); }
         finally { _draftBusy = false; }
@@ -643,6 +658,7 @@ const ExpenseManager = (() => {
         if (!draft) { alert('下書きが見つかりません'); return; }
         if (!confirm('現在の入力を破棄して下書きを読み込みますか？')) return;
         if (typeof EtcWorkflow !== 'undefined') await EtcWorkflow.beforeLoad();
+        selectDraftForEditing(null);
         _setVal('expSubmitDate', draft.submitDate || new Date().toLocaleDateString('sv-SE'));
         _setVal('expSSName', draft.ssName || '千葉西SS');
         _setVal('expEmployeeName', draft.employeeName || '小出晃也');
@@ -688,6 +704,7 @@ const ExpenseManager = (() => {
         recalculate();
         ExpenseDraftReceipts.load(draft.parkingReceipts || null);
         if (typeof EtcWorkflow !== 'undefined') EtcWorkflow.load(draft.etcEvidence || null);
+        selectDraftForEditing(draft);
         alert(draft.etcEvidence?.records?.length ? '✅ 精算書とETC ' + draft.etcEvidence.records.length + '件を読み込みました。「ETC PDF・寄り道」で日付を選び、確認・修正・PDF出力ができます。' : (draft.parkingReceipts ? '✅ 精算書と領収書 ' + draft.parkingReceipts.items.length + '枚を読み込みました。下の「この下書きの領収書」で確認・修正できます。' : '✅ 精算書を読み込みました。この旧下書きには領収書が保存されていません。必要な写真は駐車場欄で選び直してから保存してください。'));
         if (draft.etcEvidence?.records?.length) { document.getElementById('etcSection').open = true; document.getElementById('etcSection').scrollIntoView({block:'start'}); }
         else document.getElementById('loadedDraftReceipts')?.scrollIntoView({block:'start'});
@@ -697,16 +714,23 @@ const ExpenseManager = (() => {
 
     async function deleteDraft(id) {
         if (_draftBusy || !confirm('この下書きと、下書きに保存した領収書を削除しますか？通常の駐車場明細は残ります。')) return;
-        try { await ExpenseDraftStore.remove(id); await renderDraftList(); }
-        catch(error) { alert('下書きを削除できませんでした。' + error.message); }
+        _draftBusy = true;
+        try {
+            await ExpenseDraftStore.remove(id);
+            if (_activeDraft?.id === id) selectDraftForEditing(null);
+            await renderDraftList();
+        } catch(error) { alert('下書きを削除できませんでした。' + error.message); }
+        finally { _draftBusy = false; }
     }
 
     // ==========================================
     // クリア
     // ==========================================
     function clearAll() {
-        if (!confirm('すべての入力をクリアしますか？')) return;
+        if (_draftBusy || !confirm('すべての入力をクリアしますか？ 保存した下書きは残ります。')) return;
+        selectDraftForEditing(null);
         ExpenseDraftReceipts.reset();
+        if (typeof EtcWorkflow !== 'undefined') EtcWorkflow.leaveDraft();
         _setVal('expDestCompany', '');
         _setVal('expDestAddress', '');
         const container = document.getElementById('expenseRows');

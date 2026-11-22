@@ -1,5 +1,5 @@
 // 下書きに付ける写真の選択と、読み込んだ時点の領収書の編集。
-// 通常の駐車場明細を上書きせず、次の下書き保存で新しい版を残す。
+// 通常の駐車場明細を上書きせず、編集中の精算書の下書きに反映する。
 const ExpenseDraftReceipts = (() => {
     let loaded=null;
     const clone=value=>JSON.parse(JSON.stringify(value));
@@ -43,7 +43,7 @@ const ExpenseDraftReceipts = (() => {
         button.hidden=!item.visitCaptionReview;
         button.disabled=!ParkingDocument.captionReady(item);
     }
-    function edited() { document.getElementById('draftReceiptEditStatus').textContent='変更はまだ下書きに保存されていません。「下書きを保存」を押してください。'; }
+    function edited() { document.getElementById('draftReceiptEditStatus').textContent='変更はまだ下書きに保存されていません。「この下書きを更新」または「別の下書きとして保存」を押してください。'; }
     function render() {
         const container=document.getElementById('draftReceiptCards');if(!container)return;
         container.innerHTML='';
@@ -80,7 +80,7 @@ const ExpenseDraftReceipts = (() => {
             refreshCaption(card,previous,next);
             edited();
         };
-        document.getElementById('draftReceiptEditStatus').textContent='保存時の写真・説明です。修正したら「下書きを保存」で新しい下書きとして残せます。';
+        document.getElementById('draftReceiptEditStatus').textContent='保存時の写真・説明です。修正したら「この下書きを更新」で保存できます。';
     }
     function setPageSize(value) { if(loaded)loaded.pageSize=Number(value)===4?4:6; }
     async function preview() { if(loaded)await ParkingPdf.generate(clone(loaded)); }

@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="stylesheet" href="styles/common.css">
     <link rel="stylesheet" href="styles/receipt.css?v=20261019-2">
-    <link rel="stylesheet" href="styles/expense.css?v=20261121-row-date-1">
+    <link rel="stylesheet" href="styles/expense.css?v=20261122-draft-update-1">
     <!-- v2.0追加 - 駐車場利用明細スタイル -->
     <link rel="stylesheet" href="styles/parking.css">
     <link rel="stylesheet" href="styles/parking-workflow.css?v=20261121-3">
@@ -228,8 +228,9 @@
                     <button class="btn btn-primary" onclick="ExpensePdf.generate()">精算書をPDFにする</button>
                     <label class="draft-choice">下書きに付ける領収書<select id="draftReceiptSource" onchange="ExpenseDraftReceipts.updateHint()"><option value="current">駐車場欄で選んだ分</option><option value="loaded" id="draftReceiptLoadedOption" disabled>読み込んだ下書きの分</option><option value="none">領収書を付けない</option></select></label>
                     <p id="draftReceiptHint" class="save-hint" role="status"></p>
-                    <button class="btn btn-secondary" onclick="ExpenseManager.saveDraft()">下書きを保存</button>
-                    <p class="save-hint">写真と説明も下書きに残ります。修正後に保存すると新しい下書きが追加されます。</p>
+                    <button type="button" class="btn btn-secondary" id="expDraftSave" onclick="ExpenseManager.saveDraft()">下書きを新規保存</button>
+                    <button type="button" class="btn btn-secondary" id="expDraftCopy" onclick="ExpenseManager.saveDraft({asCopy:true})" hidden>別の下書きとして保存</button>
+                    <p class="save-hint" id="expDraftSaveHint" role="status">精算書と選んだ領収書・ETCの確認内容をまとめて保存します。</p>
                     <details class="reset-details"><summary>入力をやり直す</summary><button class="btn btn-danger-quiet" onclick="ExpenseManager.clearAll()">精算書の入力をクリア</button></details>
                 </section>
                 <section class="panel-card"><h3 class="card-title">保存した下書き</h3><div id="expDraftList"><p class="empty-msg">下書きはありません</p></div></section>
@@ -426,10 +427,10 @@
     <script src="expense/expense-import.js?v=20261121-etc-legacy-1"></script>
     <script src="expense/xlsx-lite.js?v=20261105-4"></script>
     <script src="shared/pdf-renderer.js"></script>
-    <script src="expense/expense-draft-store.js?v=20261019-15"></script>
-    <script src="expense/expense-draft-receipts.js?v=20261121-review-1"></script>
+    <script src="expense/expense-draft-store.js?v=20261122-draft-update-1"></script>
+    <script src="expense/expense-draft-receipts.js?v=20261122-draft-update-1"></script>
     <script src="expense/visit-picker.js?v=20261105-6"></script>
-    <script src="expense/expense-manager.js?v=20261122-safety-1"></script>
+    <script src="expense/expense-manager.js?v=20261122-draft-update-1"></script>
     <script src="expense/expense-pdf.js?v=20261019-7"></script>
     <script src="expense/expense-etc.js?v=20261121-etc-legacy-1"></script>
     <!-- v1.3追加 - Phase I: 駐車場明細IndexedDB管理 -->
@@ -485,7 +486,7 @@
     <script src="expense/etc-store.js?v=20261019-7"></script>
     <script src="expense/etc-reader.js?v=20261019-7"></script>
     <script src="expense/etc-view.js?v=20261031-2"></script>
-    <script src="expense/etc-workflow.js?v=20261031-2"></script>
+    <script src="expense/etc-workflow.js?v=20261122-draft-update-1"></script>
     <script src="shared/workflow-ui.js?v=20261120-expense-1"></script>
     <script src="shared/backup-format.js?v=20261117-3"></script>
     <script src="shared/backup-store.js?v=20261117-3"></script>

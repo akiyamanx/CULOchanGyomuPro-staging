@@ -1,5 +1,5 @@
 const EtcWorkflow = (() => {
-    let state={records:[],days:{},selectedDate:''},draftMode=false,ready=false,busy=false,queue=Promise.resolve(),saveError=null,saveTimer;
+    let state={records:[],days:{},selectedDate:''},liveBeforeDraft=null,draftMode=false,ready=false,busy=false,queue=Promise.resolve(),saveError=null,saveTimer;
     const el=id=>document.getElementById(id),day=()=>state.days[state.selectedDate];
     const message=text=>{el('etcSaveStatus').textContent=text;};
     function plans(date=state.selectedDate) {
@@ -24,7 +24,7 @@ const EtcWorkflow = (() => {
         return changed;
     }
     function persist() {
-        if(draftMode){message('下書きを編集中です。変更を残すには「下書きを保存」を押してください。');return Promise.resolve();}
+        if(draftMode){message('下書きを編集中です。変更を残すには「この下書きを更新」か「別の下書きとして保存」を押してください。');return Promise.resolve();}
         const value=EtcJourney.clone(state);message('ETCの確認内容を保存中…');
         queue=queue.catch(()=>{}).then(()=>EtcStore.save(value)).then(()=>{saveError=null;message('ETCの確認内容を保存しました。精算書の金額は「反映」で更新します。');},error=>{saveError=error;message('保存できませんでした。画面を閉じず、下書き保存を試してください。'+error.message);});
         return queue;
@@ -167,7 +167,18 @@ const EtcWorkflow = (() => {
         await queue;
         if(saveError&&!draftMode)throw new Error('現在のETC編集を保存できません。保存状態を確認してください。');
     }
-    function load(value) {if(value){state=EtcJourney.clone(value);draftMode=true;render();}else if(draftMode){state={records:[],days:{},selectedDate:new Date().toLocaleDateString('sv-SE')};render();} }
+    function load(value) {
+        if (!draftMode) liveBeforeDraft = state;
+        state = value ? EtcJourney.clone(value) : {records:[],days:{},selectedDate:new Date().toLocaleDateString('sv-SE')};
+        draftMode = true;
+        render();
+    }
+    function leaveDraft() {
+        if (!draftMode) return;
+        clearTimeout(saveTimer); saveTimer=null;
+        state=liveBeforeDraft; liveBeforeDraft=null; draftMode=false;
+        render();
+    }
     function isManaged(date) {return Boolean(ready&&state.days[date]);}
     function assertSynced() {
         if(!ready)throw new Error('ETCの保存データを確認中です。');
@@ -194,5 +205,5 @@ const EtcWorkflow = (() => {
         const items=total.accepted.map(r=>({...r,captionLines:['日付：'+r.date+' '+r.time,'区間：'+(r.legId==='shared'?'共通区間':d.legs.find(l=>l.id===r.legId).label),'訪問先：'+r.visitCompany,'目的：'+r.machineName+'・'+r.purpose,...(r.claimAmount!==r.amount?['本部提出額：'+r.claimAmount+'円（証明書 '+r.amount+'円）']:[]),...(r.note?['メモ：'+r.note]:[])]}));
         await ParkingPdf.generate({items,pageSize:Number(el('etcPageSize').value),title:'高速道路利用明細',sourceLabel:'ETC・本部提出分'});
     }
-    return {init,capture,beforeLoad,settled,load,isManaged,assertSynced,preview};
+    return {init,capture,beforeLoad,settled,load,leaveDraft,isManaged,assertSynced,preview};
 })();

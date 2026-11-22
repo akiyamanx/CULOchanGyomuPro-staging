@@ -7,6 +7,8 @@ async function runExpenseTests() {
     const checks = [];
     function assert(condition, message) { if (!condition) throw new Error(message); checks.push('PASS ' + message); }
     try {
+        await ExpenseDraftStore.replaceAll([]);
+        AppStorage.removeItem('travelExpenseDrafts');
         document.getElementById('expenseRows').innerHTML = '';
         ExpenseManager.addRow();
         document.getElementById('expSubmitDate').value = '2026-10-09';
@@ -37,6 +39,8 @@ async function runExpenseTests() {
         assert(ExpenseManager.getRowsData()[0].gasCost === '2400', '180kmは2,400円(100kmまで0円・超えた分30円)');
         assert(ExpenseManager.getRowsData()[0].destCompany === '検証株式会社', '行先・住所を日別明細へ反映');
         assert(document.getElementById('expGrandTotal').textContent === '¥5,800', 'ETC・ガソリン・駐車場を総合計');
+        fixture.attachments = [{ id:'p1', imageDataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII=', purpose:'架空の点検' }];
+        etcFixture = {records:[{ id:'e1', amount:1200 }], days:{}, selectedDate:'2026-10-08'};
         testDraftId = await ExpenseManager.saveDraft();
         await ExpenseManager.loadDraft(testDraftId);
         assert(ExpenseManager.getRowsData()[0].parking === '100', '下書きの駐車場代を復元');
@@ -96,6 +100,20 @@ async function runExpenseTests() {
         assert(document.getElementById('expEtcModal').style.display==='none', 'ETCの確認操作から差し替えを実行');
         assert(ExpenseManager.getRowsData()[0].highway==='1600'&&ExpenseManager.getRowsData()[0].highwayCount==='2', 'ETCの差し替えで件数と他の通行を維持');
         const revisedDraftId=await ExpenseManager.saveDraft();
+        assert(revisedDraftId===testDraftId && (await ExpenseDraftStore.list()).length===1, '修正して保存しても同じ下書き1件だけ');
+        const revised = await ExpenseDraftStore.get(revisedDraftId);
+        assert(revised.parkingReceipts.items[0]?.purpose==='架空の点検' && revised.etcEvidence.records[0]?.amount===1200 && revised.rows[0].highway==='1600', '更新した金額と領収書・ETCの記録が一緒に残る');
+        const next = {...revised, updatedAt:revised.updatedAt + 1};
+        await ExpenseDraftStore.save(next, revised);
+        let rejected = false;
+        try { await ExpenseDraftStore.save({...revised, destCompany:'古い入力'}, revised); } catch (_) { rejected = true; }
+        assert(rejected && (await ExpenseDraftStore.get(revisedDraftId)).updatedAt===next.updatedAt, '別タブで先に更新された下書きを黙って上書きしない');
+        await ExpenseManager.loadDraft(revisedDraftId);
+        assert(document.getElementById('expDraftSave').textContent==='この下書きを更新', '開いている下書きの保存先を表示');
+        const copyId = await ExpenseManager.saveDraft({asCopy:true});
+        assert(copyId!==revisedDraftId && (await ExpenseDraftStore.list()).length===2, '明示して別保存したときだけ件数が増える');
+        await ExpenseManager.deleteDraft(copyId);
+        assert(document.getElementById('expDraftSave').textContent==='下書きを新規保存', '編集中の下書きを削除したら更新先が解除される');
         await ExpenseManager.loadDraft(revisedDraftId);
         assert(ExpenseManager.applyEtcRecords(records).count===0, 'ETCの旧版は差し替え後に下書きを開き直しても再追加しない');
         const locked = ExpenseManager.getOrCreateDateRow('2026-10-08');
@@ -124,7 +142,20 @@ async function runExpenseTests() {
         ExpenseEtc.applyToExpense();
         assert(legacy.querySelector('.exp-highway').value==='1600' && legacy.querySelector('.exp-highway-count').value==='1', '旧データの高速代と件数は全選択でも維持');
         ExpenseEtc.closeModal();
-        await ExpenseManager.deleteDraft(revisedDraftId);
+        window.confirm = () => false;
+        AppStorage.setItem('travelExpenseDrafts', JSON.stringify([{id:123456, destination:'旧形式の架空会社', rows:[]}]));
+        await ExpenseManager.loadDraft(123456);
+        assert(await ExpenseManager.saveDraft()===revisedDraftId, '別の下書きを開く操作をキャンセルすると更新先は変わらない');
+        window.confirm = () => true;
+        await ExpenseManager.loadDraft(123456);
+        assert(await ExpenseManager.saveDraft()===123456 && (await ExpenseDraftStore.list()).filter(d=>d.id===123456).length===1 && (await ExpenseDraftStore.get(123456)).version===2, '旧下書きも増やさず写真に対応する方式で更新する');
+        await ExpenseManager.loadDraft(revisedDraftId);
+        const snapshot = await ExpenseDraftStore.get(revisedDraftId);
+        ExpenseManager.clearAll();
+        document.getElementById('expDestCompany').value='新規の架空会社';
+        const freshId = await ExpenseManager.saveDraft();
+        assert(freshId!==revisedDraftId && (await ExpenseDraftStore.get(revisedDraftId)).destCompany===snapshot.destCompany, '入力クリア後の保存で以前の下書きを上書きしない');
+        await ExpenseManager.deleteDraft(freshId);
         output.textContent = checks.join('\n') + '\n完了: ' + checks.length + '項目 PASS（PDFはボタンで別途出力）';
         output.dataset.result = 'pass';
     } catch (error) { output.textContent = checks.join('\n') + '\nFAIL ' + error.stack; output.dataset.result = 'fail'; }
