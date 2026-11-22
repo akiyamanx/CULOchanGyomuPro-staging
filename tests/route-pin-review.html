@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>訪問ルートのピン見本</title>
+<link rel="stylesheet" href="../styles/map/map-styles.css?v=20261122-route-pins-1">
+<style>
+body{background:#f3f6fa;color:#182532;font:16px/1.5 system-ui,sans-serif;padding:1rem;margin:auto;max-width:670px}
+h1{font-size:1.5rem} ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.65rem;list-style:none;padding:0}
+li,#example{background:#e1eadf;border:1px solid #bcccbc;border-radius:.6rem;padding:.5rem;display:flex;align-items:center;gap:.5rem}
+.route-pin-swatch{width:36px;height:42px} button{font:inherit;padding:.5rem .8rem;min-height:44px}
+</style>
+<main><h1>訪問ルートのピン見本</h1><p>架空データです。アポ済みのルートは色・形・番号。未アポは黒い旗です。</p>
+<ul id="routes"></ul>
+<h2>未アポの例（ルート8）</h2><p id="example" role="status"></p>
+<button id="change" type="button">アポ済みに切り替える</button></main>
+<script src="../map/route-pin-style.js?v=20261122-route-pins-1"></script>
+<script>
+const colors=['#4285f4','#283593','#34a853','#ff9800','#9c27b0','#00bcd4','#00796b','#795548','#607d8b','#8a9400'];
+const routes=colors.map((color,i)=>({id:'route_'+(i+1),name:'ルート'+(i+1),color}));
+document.getElementById('routes').innerHTML=routes.map(r=>'<li>'+RoutePinStyle.swatch(RoutePinStyle.routeStyle(r,routes))+r.name+'</li>').join('');
+const change=document.getElementById('change');
+let status='pending';
+function show() {
+    document.getElementById('example').innerHTML=RoutePinStyle.swatch(RoutePinStyle.visitStyle({routeId:'route_8',status},routes))+' '+RoutePinStyle.statusLabel(status)+' · ルート8';
+    change.textContent=status==='pending'?'アポ済みに切り替える':'未アポに戻す';
+}
+change.onclick=()=>{status=status==='pending'?'appointed':'pending';show();};
+show();
+</script>
+</html>

@@ -28,12 +28,6 @@ const MapCore = (() => {
     }
     function mapFailed(why) { guard.markFailed(why); showMapNotice(); }
 
-    const PIN_COLORS = {
-        pending: '#b57b17',
-        appointed: '#1765aa',
-        completed: '#177050'
-    };
-
     function initMap() {
         const settings = DataStorage.getSettings();
         const defaultCenter = { lat: 35.6939, lng: 139.7535 };
@@ -200,34 +194,22 @@ const MapCore = (() => {
         });
     }
 
+    const markerRoutes = () => (DataStorage.isUndatedCombinedView?.() ? [] : DataStorage.getRoutes());
+    function markerTitle(customer,routes) {
+        const route=routes.find(r=>r.id===customer.routeId);
+        return [customer.company || '不明',RoutePinStyle.statusLabel(customer.status),route?.name].filter(Boolean).join(' · ');
+    }
     function createMarker(customer, latLng) {
-        const routes = DataStorage.getRoutes();
-        const route = routes.find(r => r.id === customer.routeId);
-        const pinColor = route ? route.color : PIN_COLORS[customer.status] || PIN_COLORS.pending;
-
+        const routes = markerRoutes();
         let label = customer.company || '不明';
-        if (customer.unitCount && customer.unitCount > 1) {
-            label += `（${customer.unitCount}台）`;
-        }
-
-        const icon = {
-            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            fillColor: pinColor, fillOpacity: 1,
-            strokeColor: '#ffffff', strokeWeight: 2,
-            scale: 6, anchor: new google.maps.Point(0, 0)
-        };
-
+        if (customer.unitCount && customer.unitCount > 1) label += `（${customer.unitCount}台）`;
         const marker = new google.maps.Marker({
-            position: latLng, map: map, icon: icon,
-            label: {
-                text: label, color: '#1e293b', fontSize: '11px',
-                fontWeight: '600', fontFamily: 'Noto Sans JP, sans-serif',
-                className: 'marker-label'
-            },
-            customData: customer
+            position:latLng,map,icon:RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes),google.maps),
+            title:markerTitle(customer,routes),
+            label:{text:label,color:'#1e293b',fontSize:'11px',fontWeight:'600',fontFamily:'Noto Sans JP, sans-serif',className:'marker-label'}
         });
-
-        marker.addListener('click', () => { showInfoWindow(marker, customer); });
+        marker.customData=customer;
+        marker.addListener('click', () => showInfoWindow(marker,marker.customData));
         markers.push(marker);
         return marker;
     }
@@ -298,15 +280,10 @@ const MapCore = (() => {
         if (!customer) return;
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
         if (!marker) return;
-        const routes = DataStorage.getRoutes();
-        const route = routes.find(r => r.id === customer.routeId);
-        const pinColor = route ? route.color : PIN_COLORS[customer.status] || PIN_COLORS.pending;
-        marker.setIcon({
-            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            fillColor: pinColor, fillOpacity: 1,
-            strokeColor: '#ffffff', strokeWeight: 2,
-            scale: 6, anchor: new google.maps.Point(0, 0)
-        });
+        const routes = markerRoutes();
+        marker.customData=customer;
+        marker.setIcon(RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes),google.maps));
+        marker.setTitle(markerTitle(customer,routes));
     }
 
     function updateCountBadge() {
@@ -333,7 +310,7 @@ const MapCore = (() => {
             const status = statuses[c.status] ? c.status : 'pending';
             const undated = typeof DataStorage.hasVisitDate === 'function' ? !DataStorage.hasVisitDate(c) : !c.appoDate;
             html += `<button type="button" class="customer-item" data-customer-id="${esc(c.id)}">`;
-            html += `<span class="customer-status status-${status}" aria-hidden="true"></span>`;
+            html += `${RoutePinStyle.swatch(RoutePinStyle.visitStyle(c,combined ? [] : routes))}`;
             html += `<span class="customer-info">`;
             html += `<span class="customer-name">${esc(c.company || '不明')}`;
             if (c.managementNo) html += ` <small>${esc(c.managementNo)}</small>`;
