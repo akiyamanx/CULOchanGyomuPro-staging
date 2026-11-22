@@ -108,12 +108,18 @@ async function runExpenseTests() {
         let rejected = false;
         try { await ExpenseDraftStore.save({...revised, destCompany:'古い入力'}, revised); } catch (_) { rejected = true; }
         assert(rejected && (await ExpenseDraftStore.get(revisedDraftId)).updatedAt===next.updatedAt, '別タブで先に更新された下書きを黙って上書きしない');
+        await ExpenseManager.deleteDraft(revisedDraftId);
+        assert((await ExpenseDraftStore.get(revisedDraftId)).updatedAt===next.updatedAt, '編集中に別タブで更新された下書きは古い画面から削除しない');
         await ExpenseManager.loadDraft(revisedDraftId);
         assert(document.getElementById('expDraftSave').textContent==='この下書きを更新', '開いている下書きの保存先を表示');
         const copyId = await ExpenseManager.saveDraft({asCopy:true});
         assert(copyId!==revisedDraftId && (await ExpenseDraftStore.list()).length===2, '明示して別保存したときだけ件数が増える');
+        await ExpenseManager.deleteDraft(revisedDraftId, revised);
+        assert((await ExpenseDraftStore.get(revisedDraftId)).updatedAt===next.updatedAt, '表示が古い一覧から別の下書きを削除しない');
         await ExpenseManager.deleteDraft(copyId);
         assert(document.getElementById('expDraftSave').textContent==='下書きを新規保存', '編集中の下書きを削除したら更新先が解除される');
+        assert(document.getElementById('expDestCompany').value==='' && document.getElementById('draftReceiptSource').value==='none'
+            && document.getElementById('loadedDraftReceipts').hidden, '削除後、前の行先・領収書を新規下書きに引き継がない');
         await ExpenseManager.loadDraft(revisedDraftId);
         assert(ExpenseManager.applyEtcRecords(records).count===0, 'ETCの旧版は差し替え後に下書きを開き直しても再追加しない');
         const locked = ExpenseManager.getOrCreateDateRow('2026-10-08');

@@ -637,8 +637,11 @@ const ExpenseManager = (() => {
             container.onclick = event => {
                 const button = event.target.closest('[data-draft-action]');
                 if (!button) return;
-                const id = drafts[Number(button.dataset.index)]?.id;
-                if (id !== undefined) ({open:loadDraft,pdf:previewDraftReceipts,delete:deleteDraft})[button.dataset.draftAction]?.(id);
+                const draft = drafts[Number(button.dataset.index)];
+                if (!draft) return;
+                const action = button.dataset.draftAction;
+                if (action === 'delete') deleteDraft(draft.id, draft);
+                else ({open:loadDraft,pdf:previewDraftReceipts})[action]?.(draft.id);
             };
         } catch(error) { if (version === _draftRenderVersion) container.textContent = '下書きを読み込めませんでした。ブラウザの保存設定を確認してください。'; }
     }
@@ -713,15 +716,21 @@ const ExpenseManager = (() => {
         finally { _draftBusy = false; }
     }
 
-    async function deleteDraft(id) {
-        if (_draftBusy || !confirm('この下書きと、下書きに保存した領収書を削除しますか？通常の駐車場明細は残ります。')) return;
+    async function deleteDraft(id, listed) {
+        if (_draftBusy) return;
+        const active = _activeDraft?.id === id;
+        if (!confirm('この下書きと、下書きに保存した領収書・ETCを削除しますか？'
+            + (active ? '\n編集中の入力もクリアします。' : '')
+            + '\n通常の駐車場・ETC明細は残ります。')) return;
         _draftBusy = true;
         try {
-            await ExpenseDraftStore.remove(id);
-            if (_activeDraft?.id === id) selectDraftForEditing(null);
-            await renderDraftList();
+            await ExpenseDraftStore.remove(id, active ? _activeDraft : listed);
+            if (active) resetForm({afterDelete:true});
         } catch(error) { alert('下書きを削除できませんでした。' + error.message); }
-        finally { _draftBusy = false; }
+        finally {
+            await renderDraftList();
+            _draftBusy = false;
+        }
     }
 
     // ==========================================
@@ -729,8 +738,18 @@ const ExpenseManager = (() => {
     // ==========================================
     function clearAll() {
         if (_draftBusy || !confirm('すべての入力をクリアしますか？ 保存した下書きは残ります。')) return;
+        resetForm();
+    }
+    function resetForm({afterDelete = false} = {}) {
         selectDraftForEditing(null);
-        ExpenseDraftReceipts.reset();
+        if (afterDelete) {
+            ExpenseDraftReceipts.load(null);
+            _setVal('expSubmitDate', new Date().toLocaleDateString('sv-SE'));
+            for (const id of ['expSSName', 'expEmployeeName']) {
+                const field = document.getElementById(id);
+                if (field && typeof field.defaultValue === 'string') field.value = field.defaultValue;
+            }
+        } else ExpenseDraftReceipts.reset();
         if (typeof EtcWorkflow !== 'undefined') EtcWorkflow.leaveDraft();
         _setVal('expDestCompany', '');
         _setVal('expDestAddress', '');

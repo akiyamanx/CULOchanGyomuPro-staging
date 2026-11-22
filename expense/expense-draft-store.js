@@ -80,9 +80,26 @@ const ExpenseDraftStore = (() => {
             try { removeLegacy(draft.id); } catch (_) { /* 旧控えは残す */ }
         }
     }
-    async function remove(id) {
-        if (typeof id === 'number') removeLegacy(id); // 旧控えがあるときに削除後に復活させない。
-        await write(tx=>{tx.objectStore('drafts').delete(id);tx.objectStore('summaries').delete(id);});
+    async function remove(id, expected) {
+        await write((tx, abort)=>{
+            const records = tx.objectStore('drafts');
+            const request = records.get(id);
+            request.onsuccess = () => {
+                try {
+                    const current = request.result || (typeof id === 'number' ? legacy().find(d=>d.id===id) : null);
+                    if (expected && (!current || (current.updatedAt || 0) !== (expected.updatedAt || 0))) {
+                        abort(new Error('この下書きは別の画面で更新または削除されました。最新の内容を確認してから削除してください。'));
+                        return;
+                    }
+                    // 旧控えの削除が失敗しても、IndexedDB側の下書きは残しておく。
+                    if (typeof id === 'number') removeLegacy(id);
+                    if (request.result) {
+                        records.delete(id);
+                        tx.objectStore('summaries').delete(id);
+                    }
+                } catch (error) { abort(error); }
+            };
+        });
     }
     async function replaceAll(drafts) {
         await write(tx => {
