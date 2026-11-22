@@ -9,8 +9,7 @@ async function runExpenseTests() {
     try {
         await ExpenseDraftStore.replaceAll([]);
         AppStorage.removeItem('travelExpenseDrafts');
-        document.getElementById('expenseRows').innerHTML = '';
-        ExpenseManager.addRow();
+        ExpenseManager.clearAll();
         document.getElementById('expSubmitDate').value = '2026-10-09';
         fixture.parking = [{id:'park_a',date:'2026-10-08',amount:600},{id:'park_b',date:'2026-10-09',amount:800}];
         const csv = '利用年月日,利用ＩＣ（自）,利用ＩＣ（至）,通行料金\n2026/10/08,千葉,東京,"1,200"\n2026/10/08,東京,千葉,500\n2026/10/09,東京,横浜,800';
@@ -39,9 +38,20 @@ async function runExpenseTests() {
         assert(ExpenseManager.getRowsData()[0].gasCost === '2400', '180kmは2,400円(100kmまで0円・超えた分30円)');
         assert(ExpenseManager.getRowsData()[0].destCompany === '検証株式会社', '行先・住所を日別明細へ反映');
         assert(document.getElementById('expGrandTotal').textContent === '¥5,800', 'ETC・ガソリン・駐車場を総合計');
-        fixture.attachments = [{ id:'p1', imageDataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII=', purpose:'架空の点検' }];
+        fixture.attachments = [{ id:'p1', date:'2026-10-08', amount:800, imageDataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII=', purpose:'架空の点検' }];
         etcFixture = {records:[{ id:'e1', amount:1200 }], days:{}, selectedDate:'2026-10-08'};
+        fixture.attachments.push({...fixture.attachments[0],id:'p2',date:'2026-09-30',amount:950});
+        ExpenseDraftReceipts.updateHint();
+        const attachmentReview=document.getElementById('draftReceiptReview');
+        assert(attachmentReview.textContent.includes('2026-09-30 ／ 950円'),'保存欄で別の日の領収書の日付と金額を表示');
+        assert(!await ExpenseManager.saveDraft() && (await ExpenseDraftStore.list()).length===0, '日付の違う領収書を未確認のまま保存しない');
+        const disposition=attachmentReview.querySelector('[data-receipt-review]');
+        disposition.value='exclude';
+        disposition.dispatchEvent(new Event('change',{bubbles:true}));
         testDraftId = await ExpenseManager.saveDraft();
+        assert((await ExpenseDraftStore.get(testDraftId)).parkingReceipts.items.length===1 && fixture.attachments.length===2,
+            '今回の下書きからだけ外し、元の領収書は残す');
+        fixture.attachments.pop();
         await ExpenseManager.loadDraft(testDraftId);
         assert(ExpenseManager.getRowsData()[0].parking === '100', '下書きの駐車場代を復元');
         assert(ExpenseManager.applyEtcRecords(records).count === 0, '下書き復元後のCSV再取込でも重複なし');
@@ -159,6 +169,7 @@ async function runExpenseTests() {
         const snapshot = await ExpenseDraftStore.get(revisedDraftId);
         ExpenseManager.clearAll();
         document.getElementById('expDestCompany').value='新規の架空会社';
+        document.getElementById('draftReceiptSource').value='none';
         const freshId = await ExpenseManager.saveDraft();
         assert(freshId!==revisedDraftId && (await ExpenseDraftStore.get(revisedDraftId)).destCompany===snapshot.destCompany, '入力クリア後の保存で以前の下書きを上書きしない');
         await ExpenseManager.deleteDraft(freshId);

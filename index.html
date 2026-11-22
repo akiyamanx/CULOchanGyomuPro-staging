@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="stylesheet" href="styles/common.css">
     <link rel="stylesheet" href="styles/receipt.css?v=20261019-2">
-    <link rel="stylesheet" href="styles/expense.css?v=20261122-draft-update-1">
+    <link rel="stylesheet" href="styles/expense.css?v=20261122-receipt-review-1">
     <!-- v2.0追加 - 駐車場利用明細スタイル -->
     <link rel="stylesheet" href="styles/parking.css">
     <link rel="stylesheet" href="styles/parking-workflow.css?v=20261121-3">
@@ -195,8 +195,8 @@
                     <button type="button" class="btn btn-secondary" onclick="WorkflowUI.openParking()">駐車場の領収書を追加</button>
                 </div>
                 <details class="panel-card fold-card" id="routeImport"><summary><span>訪問ルート・走行距離</span><span class="summary-note">日付とルートを選択</span></summary><div class="fold-body" id="tabExpense"></div></details>
-                <div class="panel-card import-etc"><div><h4>高速道路の料金</h4><p class="section-desc">ETC利用照会のCSV・Excel（.xlsx）から利用日ごとに取り込みます。</p></div><label class="btn btn-secondary file-control">ETCファイルを選択（CSV・Excel）<input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onchange="ExpenseEtc.handleFile(event)" class="file-input"></label><a href="https://www.etc-meisai.jp/" target="_blank" rel="noopener" class="text-link">ETC利用照会を開く ↗</a></div>
-            <details class="panel-card fold-card" id="etcSection"><summary><span>ETC PDF・寄り道</span><span class="summary-note">月まとめ取込 → 日別に確認</span></summary><div class="fold-body" id="etcWorkflow"></div></details>
+                <div class="panel-card import-etc"><div><h4>高速道路の料金</h4><p class="section-desc">CSV・Excel：明細を選んで、今の精算書に反映します。翌日以降に日別で選びたいときは、下のPDF取込を使います。</p></div><label class="btn btn-secondary file-control">CSV・Excelから今すぐ反映<input type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="ExpenseEtc.handleFile(event)" class="file-input"></label><a href="https://www.etc-meisai.jp/" target="_blank" rel="noopener" class="text-link">ETC利用照会を開く ↗</a></div>
+            <details class="panel-card fold-card" id="etcSection"><summary><span>ETC PDF・寄り道</span><span class="summary-note">月まとめで保管 → あとで日別に選ぶ</span></summary><div class="fold-body" id="etcWorkflow"></div></details>
             </section>
             <h3 class="section-title expense-divider" id="expenseDetailsTitle" tabindex="-1"><span>2</span> 内容を確認・入力</h3>
             <section class="panel-card"><h4 class="card-title">提出先・行先</h4>
@@ -228,6 +228,7 @@
                     <button class="btn btn-primary" onclick="ExpensePdf.generate()">精算書をPDFにする</button>
                     <label class="draft-choice">下書きに付ける領収書<select id="draftReceiptSource" onchange="ExpenseDraftReceipts.updateHint()"><option value="current">駐車場欄で選んだ分</option><option value="loaded" id="draftReceiptLoadedOption" disabled>読み込んだ下書きの分</option><option value="none">領収書を付けない</option></select></label>
                     <p id="draftReceiptHint" class="save-hint" role="status"></p>
+                    <div id="draftReceiptReview" aria-label="下書きに付ける領収書の確認" hidden></div>
                     <button type="button" class="btn btn-secondary" id="expDraftSave" onclick="ExpenseManager.saveDraft()">下書きを新規保存</button>
                     <button type="button" class="btn btn-secondary" id="expDraftCopy" onclick="ExpenseManager.saveDraft({asCopy:true})" hidden>別の下書きとして保存</button>
                     <p class="save-hint" id="expDraftSaveHint" role="status">精算書と選んだ領収書・ETCの確認内容をまとめて保存します。</p>
@@ -428,9 +429,9 @@
     <script src="expense/xlsx-lite.js?v=20261105-4"></script>
     <script src="shared/pdf-renderer.js"></script>
     <script src="expense/expense-draft-store.js?v=20261122-draft-delete-1"></script>
-    <script src="expense/expense-draft-receipts.js?v=20261122-draft-update-1"></script>
+    <script src="expense/expense-draft-receipts.js?v=20261122-receipt-review-1"></script>
     <script src="expense/visit-picker.js?v=20261105-6"></script>
-    <script src="expense/expense-manager.js?v=20261122-draft-delete-1"></script>
+    <script src="expense/expense-manager.js?v=20261122-receipt-review-1"></script>
     <script src="expense/expense-pdf.js?v=20261019-7"></script>
     <script src="expense/expense-etc.js?v=20261121-etc-legacy-1"></script>
     <!-- v1.3追加 - Phase I: 駐車場明細IndexedDB管理 -->

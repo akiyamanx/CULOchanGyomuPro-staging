@@ -167,6 +167,7 @@ const ExpenseManager = (() => {
         });
         const grandEl = document.getElementById('expGrandTotal');
         if (grandEl) grandEl.textContent = '¥' + grandTotal.toLocaleString();
+        if (typeof ExpenseDraftReceipts !== 'undefined') ExpenseDraftReceipts.updateHint?.();
     }
 
     // ==========================================
@@ -271,6 +272,7 @@ const ExpenseManager = (() => {
         }
         setRowDate(row,date);
         if (panel) panel.hidden = true;
+        if (typeof ExpenseDraftReceipts !== 'undefined') ExpenseDraftReceipts.updateHint?.();
     }
 
     function reviewRowImports(button, source) {
@@ -597,8 +599,8 @@ const ExpenseManager = (() => {
         if (_draftBusy) return;
         _draftBusy = true;
         try {
-            const parkingReceipts = await ExpenseDraftReceipts.capture();
             const etcEvidence = typeof EtcWorkflow !== 'undefined' ? await EtcWorkflow.captureForDraft() : null;
+            const parkingReceipts = await ExpenseDraftReceipts.capture();
             const header = getHeaderData();
             const previous = options.asCopy ? null : _activeDraft;
             const now = Math.max(Date.now(), (previous?.updatedAt || 0) + 1);

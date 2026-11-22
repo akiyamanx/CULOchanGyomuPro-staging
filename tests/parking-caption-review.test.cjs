@@ -97,7 +97,8 @@ test('loaded draft date/owner correction blocks preview until complete and expli
     closest(){return this;},
   };
   review.closest=()=>card;
-  const ctx=vm.createContext({ParkingDocument:Parking,document:{getElementById:id=>nodes[id],createElement:()=>card},ParkingPdf:{generate(snapshot){return Parking.validate(snapshot.items)}}});
+  const ctx=vm.createContext({ExpenseManager:{getRowsData:()=>[{date:linked().date}]},ParkingDocument:Parking,document:{getElementById:id=>nodes[id],createElement:()=>card},ParkingPdf:{generate(snapshot){return Parking.validate(snapshot.items)}}});
+  vm.runInContext(fs.readFileSync(require.resolve('../expense/expense-import.js'),'utf8'),ctx);
   vm.runInContext(fs.readFileSync(require.resolve('../expense/expense-draft-receipts.js'),'utf8')+'\nthis.drafts=ExpenseDraftReceipts;',ctx);
   const original={pageSize:6,items:[linked()]};
   ctx.drafts.load(original);

@@ -1,19 +1,43 @@
 // 下書きに付ける写真の選択と、読み込んだ時点の領収書の編集。
 // 通常の駐車場明細を上書きせず、編集中の精算書の下書きに反映する。
 const ExpenseDraftReceipts = (() => {
-    let loaded=null;
+    let loaded=null, renderedReview=null;
     const clone=value=>JSON.parse(JSON.stringify(value));
     const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const decisions=new Map();
+    const getSource=()=>document.getElementById('draftReceiptSource')?.value || 'current';
+    const relevantDates=()=>[...new Set(ExpenseManager.getRowsData().map(row=>row.date).filter(Boolean))].sort();
+    function reviewItems(items,source,dates) {
+        return items.map((item,index)=>{
+            const date=ExpenseImport.normalizeDate(item.date);
+            const key=JSON.stringify([item.id ?? index,date,item.amount ?? null,dates]);
+            const mismatch=!date || !dates.includes(date);
+            const choice=mismatch
+                ? (decisions.get(source+key) || (source==='loaded' && loaded?.approvedMismatches?.includes(key) ? 'include' : ''))
+                : 'include';
+            return {item,date,key,choice,mismatch};
+        });
+    }
     async function capture() {
-        const source=document.getElementById('draftReceiptSource')?.value || 'current';
+        const source=getSource();
         if(source==='none')return {pageSize:6,items:[]};
-        if(source==='loaded') {
-            if(!loaded)throw new Error('読み込んだ下書きの領収書がありません');
-            return clone(loaded);
+        if(source==='loaded' && !loaded)throw new Error('読み込んだ下書きの領収書がありません');
+        const bundle=source==='loaded' ? clone(loaded)
+            : {pageSize:Number(document.getElementById('parkingPageSize')?.value)===4?4:6,items:await ParkingManager.snapshotSelected()};
+        if(source!==getSource())throw new Error('領収書の選択元が変わりました。内容を確認してから保存し直してください。');
+        if(!bundle.items.length)return {pageSize:bundle.pageSize,items:[]};
+        const checked=reviewItems(bundle.items,source,relevantDates());
+        if(checked.some(row=>!row.choice)) {
+            updateHint(bundle.items);
+            const first=document.getElementById('draftReceiptReview')?.querySelector('[data-receipt-review]:invalid');
+            first?.focus();
+            throw new Error('日付が合わない領収書は、付けるか外すか選んでください。');
         }
-        return {pageSize:Number(document.getElementById('parkingPageSize')?.value)===4?4:6,items:await ParkingManager.snapshotSelected()};
+        return {pageSize:bundle.pageSize,items:checked.filter(row=>row.choice==='include').map(row=>row.item),
+            approvedMismatches:checked.filter(row=>row.mismatch && row.choice==='include').map(row=>row.key)};
     }
     function load(bundle) {
+        decisions.clear();
         loaded=bundle ? clone(bundle) : null;
         const option=document.getElementById('draftReceiptLoadedOption');
         if(option)option.disabled=!loaded;
@@ -27,11 +51,46 @@ const ExpenseDraftReceipts = (() => {
         load(null);
         const source=document.getElementById('draftReceiptSource');if(source)source.value='current';updateHint();
     }
-    function updateHint() {
-        const el=document.getElementById('draftReceiptHint');if(!el)return;
-        const source=document.getElementById('draftReceiptSource')?.value || 'current';
-        const count=source==='loaded' ? loaded?.items.length || 0 : source==='none' ? 0 : ParkingManager.getSelectedItems().length;
-        el.textContent='精算書と領収書 '+count+'枚を一緒に保存します。'+(source==='current'?'駐車場欄の表示月・日付と「PDFに載せる」の選択が対象です。':'');
+    function updateHint(snapshot) {
+        const hint=document.getElementById('draftReceiptHint'), panel=document.getElementById('draftReceiptReview');
+        if(!hint && !panel)return;
+        const source=getSource();
+        const items=snapshot || (source==='loaded' ? loaded?.items || [] : source==='none' ? [] : ParkingManager.getSelectedItems());
+        if(!panel) {
+            if(hint)hint.textContent='精算書と領収書 '+items.length+'枚を一緒に保存します。';
+            return;
+        }
+        const dates=items.length ? relevantDates() : [];
+        const checked=reviewItems(items,source,dates);
+        const pending=checked.filter(row=>!row.choice).length;
+        const count=checked.filter(row=>row.choice==='include').length;
+        if(hint)hint.textContent='下書きに付ける領収書 '+count+'枚。'+(pending?' 未確認 '+pending+'枚。付けるか外すか選んでください。':'');
+        panel.hidden=!checked.length;
+        const html=checked.length ? '<ul class="draft-review-list">'+checked.map(({item,date,mismatch,choice},index)=>{
+            const amount=item.amount==null || item.amount==='' || !Number.isFinite(Number(item.amount))
+                ? '金額不明' : Number(item.amount).toLocaleString('ja-JP')+'円';
+            const position='領収書 '+(index+1)+'：'+(date || '日付不明')+' ／ '+amount;
+            if(!mismatch)return '<li><span>'+esc(position)+'</span><small>精算日と一致</small></li>';
+            const option=(value,label)=>'<option value="'+value+'"'+(choice===value?' selected':'')+'>'+label+'</option>';
+            return '<li class="draft-review-warning"><label><span>'+esc(position)+'</span><small>'
+                +(date ? 'この日付は精算書の明細にありません' : '領収書の利用日を確認してください')
+                +'</small><select required data-receipt-review="'+index+'">'
+                +option('','選んでください')+option('include','この下書きに付ける')+option('exclude','この下書きから外す')
+                +'</select></label></li>';
+        }).join('')+'</ul>' : '';
+        if(renderedReview!==html) {
+            panel.innerHTML=html;
+            renderedReview=html;
+        }
+        panel.onchange=event=>{
+            if(event.target.dataset.receiptReview===undefined)return;
+            const index=Number(event.target.dataset.receiptReview), row=checked[index], choice=event.target.value;
+            if(!row?.mismatch || !['','include','exclude'].includes(choice))return;
+            if(choice)decisions.set(source+row.key,choice);
+            else decisions.delete(source+row.key);
+            updateHint();
+            panel.querySelector('[data-receipt-review="'+index+'"]')?.focus();
+        };
     }
     function refreshCaption(card,before,item) {
         if (!card) return;
@@ -68,6 +127,7 @@ const ExpenseDraftReceipts = (() => {
                 const next=loaded.items[index]=ParkingDocument.applyEdit(previous,{[key]:event.target.value});
                 refreshCaption(event.target.closest('[data-index]'),previous,next);
                 edited();
+                updateHint();
             }
         };
         container.oninput=edit;container.onchange=edit;

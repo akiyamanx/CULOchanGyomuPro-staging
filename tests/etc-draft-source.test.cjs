@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 async function fixture() {
     const el = {};
-    const get = id => ["expenseRows","draftReceiptCards","draftReceiptHint"].includes(id) ? null : el[id] ??= {value:'',addEventListener(){},scrollIntoView(){}};
+    const get = id => ["expenseRows","draftReceiptCards","draftReceiptHint","draftReceiptReview"].includes(id) ? null : el[id] ??= {value:'',addEventListener(){},scrollIntoView(){}};
     const draft = {id:'draft-a',destCompany:'架空A社',rows:[],createdAt:1,updatedAt:1,
         etcEvidence:{records:[{id:'draft-trip',date:'2026-11-21',amount:800}],days:{},selectedDate:'2026-11-21'}};
     const live = {records:[{id:'live-trip',date:'2026-11-07',amount:1200}],days:{},selectedDate:'2026-11-07'};
@@ -21,9 +21,9 @@ async function fixture() {
         EtcView:{mount(){},options(){},trip(){},records(){},totals(){}},
         DataStorage:{getCustomersForWorkspace:()=>[],getRoutes:()=>[]},
         ExpenseDraftStore:{get:async id=>records.get(id),list:async()=>[],save:async d=>records.set(d.id,d),remove:async id=>{if(removeFails)throw new Error('保存先のエラー');records.delete(id);}},
-        ParkingManager:{snapshotSelected:async()=>[{id:'live-photo'}],getSelectedItems:()=>[]}
+        ParkingManager:{snapshotSelected:async()=>[{id:'live-photo',date:'2026-11-21'}],getSelectedItems:()=>[]}
     });
-    for (const f of ['etc-journey','expense-manager','etc-workflow','expense-draft-receipts'])
+    for (const f of ['expense-import','etc-journey','expense-manager','etc-workflow','expense-draft-receipts'])
         vm.runInContext(fs.readFileSync(require.resolve('../expense/'+f+'.js'),'utf8'),ctx);
     const [manager,etc,journey]=vm.runInContext('[ExpenseManager,EtcWorkflow,EtcJourney]',ctx);
     const date=draft.etcEvidence.selectedDate;

@@ -394,3 +394,10 @@
 .exp-date-review-text { margin: 0 0 .45rem; font-size: .9rem; line-height: 1.45; }
 .exp-date-review-links { display: flex; flex-wrap: wrap; gap: .4rem; }
 .exp-date-review-links button { min-height: 44px; }
+
+/* 保存ボタンのすぐ上で、日付の違う領収書を確認する。 */
+.draft-review-list { display:grid; gap:.45rem; list-style:none; margin:.35rem 0 .65rem; padding:0; }
+.draft-review-list li { background:var(--surface, #fff); border:1px solid #b9c9de; border-radius:.55rem; padding:.5rem .65rem; overflow-wrap:anywhere; }
+.draft-review-list small { display:block; margin-top:.15rem; }
+.draft-review-list .draft-review-warning { border-inline-start:4px solid #9b6300; }
+.draft-review-list select { display:block; width:100%; min-height:44px; max-width:100%; margin-top:.35rem; font:inherit; }
