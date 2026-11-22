@@ -16,11 +16,59 @@ const MapCore = (() => {
     let currentEditId = null;
     let completedOnly = false;
     let displayWorkspace;
+    let todayOnly = false, today = null, todayRows = [], todayIncomplete = false;
+    let viewVersion = 0;
+    function readToday() {
+        if(!todayOnly)return;
+        today=TodayVisits.clock();
+        const result=TodayVisits.read(DataStorage,today.day,VisitPlanner);
+        todayRows=result.rows;
+        todayIncomplete=result.incomplete;
+    }
+    function renderTodayCard() {
+        const card=document.getElementById('mapTodayCard');
+        if(!card)return;
+        card.hidden=!todayOnly;
+        if(!todayOnly)return;
+        const when=TodayVisits.clock(), esc=ExpenseImport.escapeHtml;
+        const next=!completedOnly && !todayIncomplete ? TodayVisits.next(todayRows,when,VisitPlanner) : null;
+        let html='';
+        if(todayIncomplete)html+='<p class="today-warning" role="status">読み込めなかった月があります。確認できた訪問だけを表示しています。</p>';
+        if(typeof navigator!=='undefined' && navigator.onLine===false)
+            html+='<p class="today-warning" role="status">オフライン：この端末に保存された訪問を表示中。地図・ナビの読み込みには通信が必要な場合があります。</p>';
+        if(next) {
+            const phones=VisitPlanner.phoneNumbers(next.phone);
+            const nav=TodayVisits.directions(next.address);
+            html+='<div class="today-next"><div><span class="today-kicker">次の訪問 · '+esc(TodayVisits.timeText(next,today.day,VisitPlanner))
+                +'</span><strong>'+esc(next.company||'訪問先名なし')+'</strong></div><div class="today-quick">';
+            html+=phones.map((p,i)=>'<a class="btn btn-secondary" href="tel:'+esc(p)+'">電話'+(phones.length>1?' '+(i+1):'')+'</a>').join('');
+            if(nav)html+='<a class="btn btn-primary" href="'+esc(nav)+'" rel="noopener noreferrer" target="_blank" aria-label="Google マップで経路を開く">ナビ</a>';
+            if(!phones.length && !nav)html+='<span class="visit-help">電話番号・住所が未登録</span>';
+            html+='</div></div>';
+        } else if(!completedOnly && !todayIncomplete) {
+            html+='<p class="today-empty">これからのアポ済みの訪問はありません。今日の訪問は一覧で確認できます。</p>';
+        }
+        if(viewCustomers().some(visible))html+='<a class="today-list-link" href="#customerList" onclick="if(typeof mapSwitchTab===&quot;function&quot;)mapSwitchTab(&quot;list&quot;)">今日の一覧へ ↓</a>';
+        card.hidden=!html;
+        if(card.dataset.renderKey!==html){card.dataset.renderKey=html;card.innerHTML=html;}
+    }
+    function toggleToday() {
+        syncMapWorkspace();
+        todayOnly=!todayOnly;
+        completedOnly=false;
+        refreshAllMarkers({fit:true});
+        if(todayOnly && typeof mapSwitchTab==='function')mapSwitchTab('list');
+    }
+    function refreshTodayClock() {
+        if(!todayOnly)return;
+        if(!today || TodayVisits.clock().day!==today.day)refreshAllMarkers({fit:true});
+        else renderTodayCard();
+    }
     const workspace = () => DataStorage.getCurrentWorkspaceId?.();
     const visible = c => RoutePinStyle.visible(c,completedOnly);
     function syncMapWorkspace() {
         const id=workspace();
-        if(displayWorkspace!==id) { displayWorkspace=id; completedOnly=false; }
+        if(displayWorkspace!==id) { displayWorkspace=id; todayOnly=false; completedOnly=false; }
     }
     function updateMapFilter(customers) {
         const count=customers.filter(c=>c.status==='completed').length;
@@ -29,11 +77,15 @@ const MapCore = (() => {
             button.textContent='完了した訪問を見る（'+count+'）';
             button.setAttribute('aria-pressed',String(completedOnly));
         }
+        const todayButton=document.getElementById('mapTodayButton');
+        if(todayButton)todayButton.setAttribute('aria-pressed',String(todayOnly));
         const message=document.getElementById('mapVisitView');
         if(message) {
-            const text=completedOnly ? '完了のみ · '+count+'件' : '未完了 · '+(customers.length-count)+'件';
+            const mode=todayOnly ? ('今日 '+today.day.slice(5).replace('-','/')+' · ') : '';
+            const text=mode+(completedOnly ? '完了のみ · '+count+'件' : '未完了 · '+(customers.length-count)+'件');
             if(message.textContent!==text)message.textContent=text;
         }
+        renderTodayCard();
     }
     function fitVisibleMarkers() {
         const shown=markers.filter(m=>visible(m.customData));
@@ -42,6 +94,15 @@ const MapCore = (() => {
         shown.forEach(m=>bounds.extend(m.getPosition()));
         map.fitBounds(bounds,{padding:50});
     }
+    function fitAfterLocation(fit,customers) {
+        const version=++viewVersion;
+        const shown=markers.some(m=>visible(m.customData));
+        if(fit && shown)fitVisibleMarkers();
+        const locating=locateMissing(customers.filter(visible));
+        if(fit && !shown)locating.then(result=>{
+            if(result.ok && version===viewVersion)fitVisibleMarkers();
+        });
+    }
     function setCompletedMode(next,{fit=true}={}) {
         if(completedOnly===next)return;
         completedOnly=next;
@@ -49,18 +110,13 @@ const MapCore = (() => {
         document.getElementById('listPickCard')?.remove();
         markers.forEach(m=>m.setVisible(visible(m.customData)));
         updateCustomerList();
-        const shown=markers.some(m=>visible(m.customData));
-        if(fit && shown)fitVisibleMarkers();
-        const ws=workspace();
-        const locating=locateMissing(viewCustomers().filter(visible));
-        if(fit && !shown)locating.then(result=>{
-            if(result.ok && completedOnly===next && workspace()===ws)fitVisibleMarkers();
-        });
+        fitAfterLocation(fit,viewCustomers());
     }
     function toggleCompleted() { setCompletedMode(!completedOnly); }
     // 地図のキーが無効・未設定だと geocode の返事が来ず「処理中」が回り続けたため、見張り役を通す。
     const guard = GeocodeGuard.create({ timeoutMs: 8000 });
-    const viewCustomers = () => (typeof DataStorage.getViewCustomers === "function" ? DataStorage.getViewCustomers() : DataStorage.getCustomers());
+    const monthCustomers = () => (typeof DataStorage.getViewCustomers === "function" ? DataStorage.getViewCustomers() : DataStorage.getCustomers());
+    const viewCustomers = () => todayOnly ? todayRows : monthCustomers();
     const findView = id => (DataStorage.findCustomer ? DataStorage.findCustomer(id) : null) || viewCustomers().find(c => c.id === id);
     function showMapNotice() {
         const setup = document.getElementById('mapSetup');
@@ -94,6 +150,7 @@ const MapCore = (() => {
         const setup = document.getElementById('mapSetup');
         if (setup) setup.hidden = true;
 
+        readToday();
         const customers = viewCustomers();
         if (customers.length > 0) {
             plotAllMarkers(customers);
@@ -217,16 +274,18 @@ const MapCore = (() => {
         });
     }
 
-    const markerRoutes = () => (DataStorage.isUndatedCombinedView?.() ? [] : DataStorage.getRoutes());
+    const markerRoutes = c => c?.workspaceId && c.workspaceId!==workspace() ? DataStorage.getRoutes(c.workspaceId)
+        : DataStorage.isUndatedCombinedView?.() ? [] : DataStorage.getRoutes();
+    const pinMonth = () => todayOnly ? today.day.slice(0,7) : workspace();
     function markerTitle(customer,routes) {
         const route=routes.find(r=>r.id===customer.routeId);
         return [customer.company || '不明',RoutePinStyle.statusLabel(customer.status),RoutePinStyle.visitDay(customer)?.iso,route?.name].filter(Boolean).join(' · ');
     }
     function createMarker(customer, latLng) {
-        const routes = markerRoutes();
+        const routes = markerRoutes(customer);
         const marker = new google.maps.Marker({
             position:latLng,map,visible:visible(customer),
-            icon:RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,workspace()),google.maps),
+            icon:RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,pinMonth()),google.maps),
             title:markerTitle(customer,routes)
         });
         marker.customData=customer;
@@ -264,7 +323,7 @@ const MapCore = (() => {
         customer = {...customer};
         Object.keys(customer).forEach(key=> { if(typeof customer[key]==='string' && !['appoDate','appoEndDate','status','routeId'].includes(key))customer[key]=esc(customer[key]); });
         if(customer.floors)customer.floors=customer.floors.map(esc);
-        const routes = DataStorage.getRoutes();
+        const routes = markerRoutes(customer);
         const route = routes.find(r => r.id === customer.routeId);
 
         let html = `<div class="info-window">`;
@@ -282,7 +341,7 @@ const MapCore = (() => {
         }
         if (customer.note) html += `<p style="font-size:11px;color:#64748b;white-space:pre-wrap;">📝 ${customer.note}</p>`;
         if (customer.info) html += `<p style="font-size:11px;color:#64748b;">ℹ️ ${customer.info}</p>`;
-        if (customer.routeId) {
+        if (route && workspace()=== (customer.workspaceId || workspace()) && !DataStorage.isUndatedCombinedView?.()) {
             const currentRoute = routes.find(r => r.id === customer.routeId);
             const currentOrder = currentRoute && currentRoute.order ? currentRoute.order : [];
             const currentIdx = currentOrder.indexOf(rawId);
@@ -303,13 +362,14 @@ const MapCore = (() => {
     function clearMarkers() { markers.forEach(m => m.setMap(null)); markers = []; }
 
     function updateMarkerColor(customerId) {
+        if(todayOnly){refreshAllMarkers();return;}
         const customer = findView(customerId);
         if (!customer) return;
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
         if (!marker) return;
-        const routes = markerRoutes();
+        const routes = markerRoutes(customer);
         marker.customData=customer;
-        marker.setIcon(RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,workspace()),google.maps));
+        marker.setIcon(RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,pinMonth()),google.maps));
         marker.setVisible(visible(customer));
         if(!visible(customer))infoWindow?.close();
         updateCustomerList();
@@ -317,7 +377,7 @@ const MapCore = (() => {
     }
 
     function updateCountBadge() {
-        const customers = viewCustomers();
+        const customers = monthCustomers();
         document.getElementById('countBadge').textContent = `${customers.length}件`;
     }
 
@@ -327,8 +387,12 @@ const MapCore = (() => {
         const customers=all.filter(visible);
         const routes = DataStorage.getRoutes();
         const listEl = document.getElementById('customerList');
-        const combined = typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView();
+        const combined = !todayOnly && DataStorage.isUndatedCombinedView?.();
         if (customers.length === 0) {
+            if(todayOnly) {
+                listEl.innerHTML='<div class="empty-msg">'+(completedOnly?'今日の完了した訪問はありません。':'今日の未完了の訪問はありません。')+'</div>';
+                return;
+            }
             if(completedOnly || all.length) {
                 listEl.innerHTML='<div class="empty-msg">'+(completedOnly?'この表示範囲に完了した訪問はありません。':'この表示範囲に未完了の訪問はありません。地図上の「完了した訪問を見る」で確認できます。')+'</div>';
                 return;
@@ -342,11 +406,12 @@ const MapCore = (() => {
         const statuses = { pending: '未アポ', appointed: 'アポ済み', completed: '訪問完了' };
         let html = combined ? '<p class="summary-note">日付が決まっていない訪問を、全部の月から表示しています（完了は除く）。元の月からは動かしていません。</p>' : '';
         for (const c of customers) {
-            const route = combined ? null : routes.find(r => r.id === c.routeId);
+            const rowRoutes = todayOnly ? markerRoutes(c) : combined ? [] : routes;
+            const route = rowRoutes.find(r => r.id === c.routeId);
             const status = statuses[c.status] ? c.status : 'pending';
             const undated = typeof DataStorage.hasVisitDate === 'function' ? !DataStorage.hasVisitDate(c) : !c.appoDate;
             html += `<button type="button" class="customer-item" data-customer-id="${esc(c.id)}">`;
-            html += `${RoutePinStyle.swatch(RoutePinStyle.visitStyle(c,combined ? [] : routes,workspace()))}`;
+            html += `${RoutePinStyle.swatch(RoutePinStyle.visitStyle(c,rowRoutes,pinMonth()))}`;
             html += `<span class="customer-info">`;
             html += `<span class="customer-name">${esc(c.company || '不明')}`;
             if (c.managementNo) html += ` <small>${esc(c.managementNo)}</small>`;
@@ -355,6 +420,7 @@ const MapCore = (() => {
             if (c.floors && c.floors.length > 0) html += ` · ${esc(c.floors.join(','))}`;
             html += `</span><span class="customer-meta">${statuses[status]} · ${esc(route ? route.name : 'ルート未割当')}`;
             if (combined && c.workspaceId && DataStorage.workspaceTag) html += ` · <span class="visit-ws-tag">${esc(DataStorage.workspaceTag(c.workspaceId))}</span>`;
+            if(todayOnly)html+=` · <strong class="today-row-time">${esc(TodayVisits.timeText(c,today.day,VisitPlanner))}</strong>`;
             const schedule = RequestParser.scheduleLabel(c);
             html += ` · <span class="${undated || c.dateNeedsReview ? 'visit-undated-tag':'visit-ws-tag'}">${esc(schedule)}</span>`;
             html += `</span></span>`;
@@ -400,6 +466,9 @@ const MapCore = (() => {
         window.scrollTo({ top: Math.max(0, scrollY + r.top - want), behavior: reduce ? 'auto' : 'smooth' });
     }
     function focusMarker(customerId) {
+        if(todayOnly && !viewCustomers().some(c=>c.id===customerId) && monthCustomers().some(c=>c.id===customerId)) {
+            todayOnly=false; refreshAllMarkers();
+        }
         const picked=viewCustomers().find(c=>c.id===customerId);
         if(picked && !visible(picked))setCompletedMode(picked.status==='completed',{fit:false});
         const marker = markers.find(m => m.customData && m.customData.id === customerId);
@@ -425,7 +494,7 @@ const MapCore = (() => {
         if (!customer || !host) return;
         const esc = ExpenseImport.escapeHtml;
         const statusText = { pending: '未アポ', appointed: 'アポ済み', completed: '完了' };
-        const route = DataStorage.getRoutes().find(r => r.id === customer.routeId);
+        const route = markerRoutes(customer).find(r => r.id === customer.routeId);
         const noMap = typeof google === 'undefined' || !map || !geocoder;
         const msgs = {
             busy: '📍 住所から地図の位置を探しています…',
@@ -463,11 +532,11 @@ const MapCore = (() => {
         const dateWarning = document.getElementById('visitDateSourceWarning');
         if (dateWarning) dateWarning.hidden = !customer.dateNeedsReview;
         document.getElementById('editPurpose').value = customer.purpose || '';
-        const routes = DataStorage.getRoutes();
+        const routes = markerRoutes(customer);
         const routeSelect = document.getElementById('editRoute');
         const routeRow = routeSelect && routeSelect.closest('.modal-row');
         const combined = typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView();
-        if (combined) {
+        if (combined || (customer.workspaceId && customer.workspaceId!==workspace())) {
             routeSelect.innerHTML = '<option value="">（この一覧ではルートは変えられません）</option>';
             routeSelect.disabled = true;
             if (routeRow) routeRow.hidden = true;
@@ -484,9 +553,12 @@ const MapCore = (() => {
         if (infoWindow) infoWindow.close();
     }
 
-    function refreshAllMarkers() {
+    function refreshAllMarkers({fit=false}={}) {
         syncMapWorkspace();
+        readToday();
         const customers = viewCustomers();
+        infoWindow?.close();
+        document.getElementById('listPickCard')?.remove?.();
         clearMarkers();
         if (!map) { updateCountBadge(); updateCustomerList(); return; }
         const cache = DataStorage.getGeoCache();
@@ -498,7 +570,7 @@ const MapCore = (() => {
         updateCountBadge();
         updateCustomerList();
         // Gmail取り込み・同期・月切替の後も、位置が無い訪問先は裏で位置を取る
-        locateMissing(customers.filter(visible));
+        fitAfterLocation(fit,customers);
     }
 
     function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -563,14 +635,21 @@ const MapCore = (() => {
         initMap, mapFailed, geocodeAndPlot, plotAllMarkers, clearMarkers,
         createMarker, updateMarkerColor, focusMarker,
         openEdit, refreshAllMarkers, locateMissing, locateAndFocus,
-        updateCountBadge, updateCustomerList, toggleCompleted,
+        updateCountBadge, updateCustomerList, toggleCompleted, toggleToday, refreshTodayClock,
         getCurrentEditId: () => currentEditId,
         getMap: () => map, getMarkers: () => markers
     };
 })();
 
 // Google Maps はキーが無効なとき window.gm_authFailure を呼ぶ。
-if (typeof window !== 'undefined') window.gm_authFailure = function () { MapCore.mapFailed('auth'); };
+if (typeof window !== 'undefined') {
+    window.gm_authFailure = function () { MapCore.mapFailed('auth'); };
+    if(window.addEventListener) {
+        for(const name of ['online','offline','focus'])window.addEventListener(name,MapCore.refreshTodayClock);
+        document.addEventListener('visibilitychange',()=>{if(!document.hidden)MapCore.refreshTodayClock();});
+        window.setInterval(()=>{if(!document.hidden)MapCore.refreshTodayClock();},30000);
+    }
+}
 function initMap() {
     MapCore.initMap();
 }

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>「今日だけ」の操作見本</title>
+<link rel="stylesheet" href="../styles/map/map-styles.css?v=20261122-today-1">
+<style>
+body{background:#f4f7fa;color:#182532;font:16px/1.55 system-ui,sans-serif;padding:1rem;margin:auto;max-width:660px}
+h1{font-size:1.5rem;margin:0} h2{font-size:1.15rem;margin:1rem 0 .5rem}
+#sample{position:relative;height:245px;overflow:hidden;border:1px solid #bcccbc;border-radius:.65rem;background:#e5eddf}
+#sample .paper{width:100%;height:100%;display:block}
+.demo-pin{position:absolute;transform:translate(-50%,-100%);width:44px;height:48px;display:grid;place-items:center;background:none;border:none;cursor:pointer}
+.demo-pin:focus-visible, button:focus-visible{outline:2px solid #1759a8;outline-offset:2px}
+.route-pin-swatch{width:36px;height:42px}
+#mapCompletedButton{font:inherit;border:1px solid #43627b;border-radius:.5rem;background:white;color:#17324a;padding:.5rem .65rem;min-height:44px;cursor:pointer;font-weight:600}
+#mapCompletedButton[aria-pressed=true]{background:#e5f5ee;color:#14563d;border-color:#177050}
+#mapVisitView{font-size:.86rem;font-weight:700}
+#mapTodayButton{font:inherit;border:1px solid #43627b;border-radius:.5rem;background:white;color:#17324a;padding:.5rem .65rem;min-height:44px;cursor:pointer;font-weight:600}
+#mapTodayButton[aria-pressed=true]{background:#e3eefc;border-color:#21568c}
+#mapTodayCard:not([hidden]){margin-bottom:.6rem}
+.today-quick a{padding:.25em .65em;border:1px solid #21568c;border-radius:.4rem;color:#21476c}
+.tools{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-bottom:.6rem}
+#customerList{min-height:1.5rem;margin:.45rem 0;font-size:.92rem}
+.muted{font-size:.88rem;color:#4c6072}
+</style>
+<main id="tab-map"><h1>「今日だけ」の操作見本</h1>
+<p class="muted">12月3日 朝8:00の架空の例。「今日だけ」で今日の訪問を表示します。見本から外部に電話・ナビは開きません。</p>
+<div class="tools"><button id="mapTodayButton" type="button" aria-pressed="false" onclick="MapCore.toggleToday()">今日だけ</button><button id="mapCompletedButton" type="button" aria-pressed="false" aria-controls="sample" onclick="MapCore.toggleCompleted()">完了した訪問を見る</button><span id="mapVisitView" role="status"></span></div>
+<div id="mapTodayCard" class="map-today-card" hidden></div>
+<div id="sample" aria-label="架空の見本地図">
+<svg class="paper" viewBox="0 0 420 230" preserveAspectRatio="none" aria-hidden="true">
+<path fill="#cbe6ef" d="M355 0Q286 74 303 143T284 230h136V0Z"/>
+<path fill="#cfdfbd" d="M43 32h80v57H43zM148 147h75v55h-75zM249 36h43v64h-43z"/>
+<path fill="none" stroke="#fffcf8" stroke-width="11" d="M-5 70L121 110 430 94M-5 174L110 168 229 132 430 165M76 0L89 58 46 230M204 0L166 130 134 230M292 0L265 129 273 230"/>
+<path fill="none" stroke="#edc775" stroke-width="6" d="M-5 126Q85 89 167 112T332 102L426 61"/>
+</svg>
+</div>
+<div id="customerList"></div><p id="sampleDetail" role="status">ピンを押すとここに詳細が出ます。</p>
+<span id="countBadge" hidden></span><div id="mapSetup" hidden></div>
+</main>
+<script src="../map/geocode-guard.js"></script>
+<script src="../map/route-pin-style.js?v=20261122-route-pins-2"></script>
+<script src="../map/visit-planner.js"></script>
+<script src="../map/today-visits.js?v=20261122-today-1"></script>
+<script>
+TodayVisits.clock=()=>({day:"2026-12-03",time:"08:00"}); // 架空デモの日時だけ固定
+const visits=[
+ {id:'a',company:'青空工業（見本）',status:'appointed',appoDate:'2026-12-03T10:00',phone:'03-0000-0000',address:'架空区1丁目2番3号（見本）',lat:30,lng:34},
+ {id:'b',company:'緑町サービス（見本）',status:'appointed',appoDate:'2026-12-03T11:30',lat:57,lng:56},
+ {id:'c',company:'みなと商事（見本）',status:'pending',routeId:'route_27',lat:72,lng:24},
+ {id:'d',company:'さくら設備（見本）',status:'completed',appoDate:'2026-12-03T07:30',lat:28,lng:68},
+ {id:'e',company:'浜辺事務所（見本）',status:'appointed',appoDate:'2026-12-31T10:00',lat:82,lng:70},
+ {id:'f',company:'北町商事（見本）',status:'completed',appoDate:'2026-12-05T09:00',lat:66,lng:79}
+];
+const DataStorage={getSettings:()=>({}),getCustomers:()=>visits,getRoutes:()=>[{id:'route_27',name:'ルート27',color:'#7b3270'}],
+ getCurrentWorkspaceId:()=> '2026-12',getWorkspaces:()=>[{id:'2026-12'}],getCustomersForWorkspace:()=>visits,getGeoCache:()=>({}),setGeoCache(){}};
+const RouteManager={updateRoutePanel(){}};
+const RequestParser={scheduleLabel:c=>c.appoDate?.slice(0,10)||'日付未定'};
+
+
+const google={maps:{Map:class{fitBounds(){}},Geocoder:class{},Point:class{},Size:class{},
+ LatLng:class{constructor(lat,lng){Object.assign(this,{lat,lng});}},LatLngBounds:class{extend(){}},
+ InfoWindow:class{setContent(html){this.html=html;}open(){document.getElementById('sampleDetail').textContent=new DOMParser().parseFromString(this.html,'text/html').querySelector('h3').textContent;}close(){document.getElementById('sampleDetail').textContent='ピンを押すとここに詳細が出ます。';}},
+ Marker:class{constructor(o){
+    this.position=o.position;
+    this.el=document.createElement('button');this.el.type='button';this.el.className='demo-pin';
+    this.el.setAttribute('aria-label',o.title);
+    const img=document.createElement('img');img.width=36;img.height=42;img.alt='';img.src=o.icon.url;this.el.append(img);
+    this.el.style.left=o.position.lat+'%';this.el.style.top=o.position.lng+'%';
+    this.setVisible(o.visible);document.getElementById('sample').append(this.el);
+ } getPosition(){return this.position;} setVisible(v){this.el.hidden=!v;this.el.style.display=v?'grid':'none';}
+ addListener(name,fn){this.el.addEventListener(name,fn);} setMap(m){if(!m)this.el.remove();}
+ }}};
+</script>
+<script src="../expense/expense-import.js"></script>
+<script src="../map/map-core.js?v=20261122-today-1"></script>
+<script>
+document.getElementById('mapTodayCard').addEventListener('click',event=>{
+    if(event.target.closest('.today-quick a')) {
+        event.preventDefault();
+        document.getElementById('sampleDetail').textContent='見本なので外部アプリは開きません。';
+    }
+});
+document.getElementById('customerList').addEventListener('click',event=>{
+    const row=event.target.closest('[data-customer-id]');
+    if(row)document.getElementById('sampleDetail').textContent=visits.find(v=>v.id===row.dataset.customerId).company;
+});
+MapCore.initMap();
+</script>
+</html>

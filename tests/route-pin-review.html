@@ -69,7 +69,7 @@ const google={maps:{Map:class{fitBounds(){}},Geocoder:class{},Point:class{},Size
  addListener(name,fn){this.el.addEventListener(name,fn);} setMap(m){if(!m)this.el.remove();}
  }}};
 </script>
-<script src="../map/map-core.js?v=20261122-route-pins-2"></script>
+<script src="../map/map-core.js?v=20261122-today-1"></script>
 <script>
 document.getElementById('calendar').innerHTML=Array.from({length:31},(_,i)=>'<li aria-label="'+(i+1)+'日">'+RoutePinStyle.swatch(RoutePinStyle.dayStyle(i+1))+'</li>').join('');
 MapCore.initMap();

@@ -323,8 +323,9 @@ function saveEdit() {
     };
     if (scheduleField) updates.scheduleKind = scheduleKind;
     if (dateWarning && !dateWarning.hidden && appoDate) updates.dateNeedsReview = false;
-    if (!(typeof DataStorage.isUndatedCombinedView === 'function' && DataStorage.isUndatedCombinedView())) {
-        updates.routeId = document.getElementById('editRoute').value || null;
+    const routeField = document.getElementById('editRoute');
+    if (routeField && !routeField.disabled && !DataStorage.isUndatedCombinedView?.()) {
+        updates.routeId = routeField.value || null;
     }
     var result = DataStorage.saveCustomerWithAppoDate
         ? DataStorage.saveCustomerWithAppoDate(id, updates)

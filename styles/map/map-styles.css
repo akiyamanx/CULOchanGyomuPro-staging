@@ -265,3 +265,18 @@
 .unused-routes p { font-size:12px; }
 .unused-routes ul { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:6px; margin:.4rem 0; padding:0; list-style:none; }
 .unused-routes li { display:flex; align-items:center; gap:4px; font-size:12px; }
+
+#tab-map .map-today-btn { min-height:44px; }
+#tab-map .map-today-btn[aria-pressed="true"] { background:#e3eefc;color:#193b61;border-color:#21568c;font-weight:700; }
+.map-today-card:not([hidden]) { padding:8px 12px; background:#f4f8fd; border-top:1px solid #bfccdb; border-bottom:1px solid #bfccdb; }
+.today-next,.today-quick { display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px; }
+.today-next { justify-content:space-between; }
+.today-next strong,.today-kicker { display:block; overflow-wrap:anywhere; }
+.today-kicker,.today-empty,.today-warning { font-size:12px; line-height:1.45; }
+.today-kicker,.today-row-time { color:#21476c; }
+.today-warning { color:#704a05;background:#fff3d7;border-radius:4px;padding:4px 8px;margin:0 0 4px; }
+.today-empty { color:#3b5269; margin:0; }
+#tab-map .today-quick .btn { width:auto;min-height:44px;text-decoration:none;display:inline-flex;align-items:center; }
+.today-list-link { display:inline-flex;align-items:center;min-height:34px;margin-top:2px;font-size:13px;color:#21476c; }
+body.map-focus .today-list-link { display:none; }
+#customerList { scroll-margin-top:72px; }
