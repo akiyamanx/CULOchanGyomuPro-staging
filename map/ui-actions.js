@@ -321,6 +321,10 @@ function saveEdit() {
         appoEndDate: appoEndDate || null,
         purpose: document.getElementById('editPurpose').value
     };
+    const serialField = document.getElementById('editManagementNo');
+    if (serialField) updates.managementNo = serialField.value.trim();
+    if (typeof EquipmentHistoryUI !== 'undefined' && document.getElementById('workActualDay'))
+        updates.workActual = EquipmentHistory.actual(EquipmentHistoryUI.input());
     if (scheduleField) updates.scheduleKind = scheduleKind;
     if (dateWarning && !dateWarning.hidden && appoDate) updates.dateNeedsReview = false;
     const routeField = document.getElementById('editRoute');
@@ -343,7 +347,7 @@ function saveEdit() {
         showVisitToast((lab && lab.month) ? lab.month + 'に移しました' : 'その月に移しました');
     }
     // 希望日時を確定予定のようにカレンダーへ案内しない。
-    if (appoDate && scheduleKind !== 'preferred') {
+    if (appoDate && scheduleKind !== 'preferred' && updates.status !== 'completed') {
         var company = document.getElementById('editCompany').value.trim();
         var address = document.getElementById('editAddress').value.trim();
         var contact = document.getElementById('editContact').value.trim();
