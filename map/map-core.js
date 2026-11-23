@@ -38,11 +38,17 @@ const MapCore = (() => {
             html+='<p class="today-warning" role="status">オフライン：この端末に保存された訪問を表示中。地図・ナビの読み込みには通信が必要な場合があります。</p>';
         if(next) {
             const phones=VisitPlanner.phoneNumbers(next.phone);
+            const loc=TodayVisits.locationDetails(next);
             const nav=TodayVisits.directions(next.address);
+            const location = [loc.building,loc.address].filter(Boolean).join(' ／ ');
+            const levels = [loc.reception && '受付: ' + loc.reception, loc.equipment && '機械の設置階: ' + loc.equipment,loc.other && 'フロア情報: ' + loc.other].filter(Boolean).join(' ／ ');
+            const serial=typeof EquipmentHistory!=='undefined' ? EquipmentHistory.serial(next.managementNo) : '';
             html+='<div class="today-next"><div><span class="today-kicker">次の訪問 · '+esc(TodayVisits.timeText(next,today.day,VisitPlanner))
-                +'</span><strong>'+esc(next.company||'訪問先名なし')+'</strong></div><div class="today-quick">';
+                +'</span><strong>'+esc(next.company||'訪問先名なし')+'</strong><p class="today-location">'+esc(location || '住所未登録')+'</p>'
+                +(levels ? '<p class="today-location">'+esc(levels)+'</p>' : '')+'</div><div class="today-quick">';
             html+=phones.map((p,i)=>'<a class="btn btn-secondary" href="tel:'+esc(p)+'">電話'+(phones.length>1?' '+(i+1):'')+'</a>').join('');
             if(nav)html+='<a class="btn btn-primary" href="'+esc(nav)+'" rel="noopener noreferrer" target="_blank" aria-label="Google マップで経路を開く">ナビ</a>';
+            if(serial)html+='<button type="button" class="btn btn-secondary" data-today-history="true">前回の作業実績を見る</button>';
             if(!phones.length && !nav)html+='<span class="visit-help">電話番号・住所が未登録</span>';
             html+='</div></div>';
         } else if(!completedOnly && !todayIncomplete) {
@@ -51,6 +57,8 @@ const MapCore = (() => {
         if(viewCustomers().some(visible))html+='<a class="today-list-link" href="#customerList" onclick="if(typeof mapSwitchTab===&quot;function&quot;)mapSwitchTab(&quot;list&quot;)">今日の一覧へ ↓</a>';
         card.hidden=!html;
         if(card.dataset.renderKey!==html){card.dataset.renderKey=html;card.innerHTML=html;}
+        const historyButton=card.querySelector?.('[data-today-history]');
+        if(historyButton && next && typeof EquipmentHistoryUI!=='undefined') historyButton.onclick=()=>EquipmentHistoryUI.openForVisit(next);
     }
     function toggleToday() {
         syncMapWorkspace();

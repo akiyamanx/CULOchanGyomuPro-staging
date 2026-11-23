@@ -61,3 +61,16 @@ test('地図キーがなくても当日の一覧・次の訪問・リンク・�
     assert.match(el('customerList').innerHTML,/data-customer-id="month"/);
     assert.doesNotMatch(el('customerList').innerHTML,/data-customer-id="now"/);
 });
+
+test('次の訪問の場所は明示された受付階と設置階を分け、不明な階を推測しない',()=>{
+    const { locationDetails }=require('../map/today-visits.js');
+    assert.deepEqual(locationDetails({address:'架空区1-8-1 架空センターＡＩＲ 16F受付15階設置'}),
+      {address:'架空区1-8-1 架空センターＡＩＲ 16F受付15階設置',building:'',reception:'16F',equipment:'15階',other:''});
+    assert.deepEqual(locationDetails({address:'架空区1-11-44 架空センター9F',buildingName:'架空センター',floors:['9F']}),
+      {address:'架空区1-11-44 架空センター9F',building:'',reception:'',equipment:'',other:'9F'});
+    assert.equal(locationDetails({address:'番地',buildingName:'別館',receptionFloor:'B1',equipmentFloor:'3階'}).building,'別館');
+    assert.equal(locationDetails({address:'受付16Fと受付18F',floors:['16F','18F']}).reception,'');
+    assert.equal(locationDetails({address:'架空ビル 受付16F 設置15F'}).equipment,'15F');
+    assert.equal(locationDetails({address:'架空ビル 16F受付・設置15F'}).equipment,'15F');
+    assert.equal(locationDetails({address:'架空ビル 15F'}).equipment,'');
+});

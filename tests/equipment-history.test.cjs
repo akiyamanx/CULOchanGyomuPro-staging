@@ -26,3 +26,19 @@ test('短縮機番、日時誤り、読み込めない月を隠さない', () =>
     assert.equal(history.actual({day:'2026-02-03',start:'10:00',end:'09:00'}),null);
     assert.equal(history.lookup({getWorkspaces:()=>[{id:'2026-10'}],getCustomersForWorkspace(){throw Error()}},'MF1234').incomplete,true);
 });
+
+test('前回実績を当日の依頼と並べる。予定・未来実績・今回の記録は前回にしない',()=>{
+    const current={id:'now',managementNo:'MF1234',appoDate:'2026-12-03T10:00',purpose:'点検',filter:'今の指示'};
+    const result={past:[
+        {id:'now',actual:{day:'2026-12-02',summary:'今回の訂正'}},
+        {id:'future',actual:{day:'2026-12-04',summary:'未来'}},
+        {id:'ambiguous',actual:{day:'2026-12-03',summary:'時刻不明'}},
+        {id:'planned',scheduled:'2026-12-02T10:00',filter:'依頼書だけ',actual:null},
+        {id:'past',actual:{day:'2026-12-03',start:'08:00',end:'09:00',summary:'実際に交換'}},
+        {id:'older',actual:{day:'2026-11-23',summary:'以前'}}
+    ]};
+    const c=history.compare(current,result);
+    assert.equal(c.current,'点検 ／ 今の指示');
+    assert.equal(c.previous.id,'past');
+    assert.equal(history.compare(current,{past:[],incomplete:true}).previous,null);
+});

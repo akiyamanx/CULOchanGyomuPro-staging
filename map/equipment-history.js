@@ -52,6 +52,16 @@ const EquipmentHistory = (() => {
         for (const list of [result.requests, result.past]) list.sort((a,b) => rank(b).localeCompare(rank(a)));
         return result;
     }
-    return { serial, actual, lookup };
+    function compare(current, result) {
+        const scheduled = string(current?.appoDate).replace(' ', 'T'), day = scheduled.slice(0,10), at = scheduled.slice(11,16);
+        const past = (result?.past || []).filter(row => {
+            const a = actual(row.actual);
+            return a && row.id != null && String(row.id) !== String(current?.id) && dayOk(day)
+                && (a.day < day || (a.day === day && timeOk(at) && a.end && a.end <= at));
+        });
+        past.sort((a,b) => (b.actual.day+'T'+(b.actual.end||b.actual.start||'')).localeCompare(a.actual.day+'T'+(a.actual.end||a.actual.start||'')));
+        return { current:[current?.purpose,current?.filter].map(string).filter(Boolean).join(' ／ '), previous:past[0]||null };
+    }
+    return { serial, actual, lookup, compare };
 })();
 if (typeof module !== 'undefined') module.exports = EquipmentHistory;

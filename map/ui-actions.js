@@ -325,6 +325,10 @@ function saveEdit() {
     if (serialField) updates.managementNo = serialField.value.trim();
     if (typeof EquipmentHistoryUI !== 'undefined' && document.getElementById('workActualDay'))
         updates.workActual = EquipmentHistory.actual(EquipmentHistoryUI.input());
+    for (const key of ['buildingName','receptionFloor','equipmentFloor']) {
+        const field = document.getElementById('visitSite-'+key);
+        if (field) updates[key] = field.value.trim();
+    }
     if (scheduleField) updates.scheduleKind = scheduleKind;
     if (dateWarning && !dateWarning.hidden && appoDate) updates.dateNeedsReview = false;
     const routeField = document.getElementById('editRoute');

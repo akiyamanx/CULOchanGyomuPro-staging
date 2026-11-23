@@ -54,6 +54,30 @@ const TodayVisits = (() => {
             .sort((a,b)=>startTime(a,planner).localeCompare(startTime(b,planner)))[0] || null;
     }
     const timeText = (c,day,planner) => startTime(c,planner) ? (planner.timeLabel(c,day)||'時刻未定') : '時刻未定';
+    function locationDetails(visit) {
+        const str = v => typeof v === 'string' ? v.trim() : '';
+        const norm = v => str(v).normalize('NFKC').toUpperCase();
+        const address = str(visit?.address), rawBuilding = str(visit?.buildingName), normalized = norm(address);
+        const floor = '(?:(?:地下|B)\\s*\\d{1,3}(?:\\s*[F階])?|\\d{1,3}\\s*[F階])';
+        const roles = {reception:'受付',equipment:'(?:機器|機械)(?:の)?設置|設置|機器|機械'};
+        const suffix={}, prefix={};
+        for (const [key,role] of Object.entries(roles)) {
+            suffix[key] = new Set([...normalized.matchAll(new RegExp('('+floor+')\\s*(?:に\\s*)?(?:'+role+')','g'))].map(m=>m[1]));
+            prefix[key] = new Set([...normalized.matchAll(new RegExp('(?:'+role+')\\s*[:：は]?\\s*('+floor+')','g'))].map(m=>m[1]));
+        }
+        const matched = side => Object.values(side).filter(values=>values.size>0).length;
+        const direction = Math.sign(matched(suffix)-matched(prefix));
+        const pick = (value,key) => {
+            if (str(value)) return str(value);
+            const found = direction>0 ? suffix[key] : direction<0 ? prefix[key] : new Set([...suffix[key],...prefix[key]]);
+            return found.size === 1 ? [...found][0] : '';
+        };
+        const reception = pick(visit?.receptionFloor,'reception');
+        const equipment = pick(visit?.equipmentFloor,'equipment');
+        const standard = v => norm(v).replace(/\s/g,'').replace(/F$/,'階');
+        const other = [...new Set((Array.isArray(visit?.floors) ? visit.floors : []).map(str).filter(f=>f && ![reception,equipment].some(x=>standard(x)===standard(f))))].join('・');
+        return { address, building:rawBuilding && !normalized.includes(norm(rawBuilding)) ? rawBuilding : '', reception, equipment, other };
+    }
     function directions(value) {
         const address=String(value??'').trim();
         if(!address)return '';
@@ -61,6 +85,6 @@ const TodayVisits = (() => {
         const url='https://www.google.com/maps/dir/?'+q;
         return url.length<=2048 ? url : '';
     }
-    return {clock,read,next,timeText,directions};
+    return {clock,read,next,timeText,locationDetails,directions};
 })();
 if(typeof module!=='undefined')module.exports=TodayVisits;

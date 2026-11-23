@@ -5,7 +5,7 @@ const VisitPlanner = (() => {
     const esc = value => ExpenseImport.escapeHtml(String(value ?? ''));
     const byId = id => document.getElementById(id);
     let month = '', selectedDay = '', appointments = [], readFailed = false, baseline = '';
-    const fields = ['editCompany','editAddress','editPhone','editContact','editRoute','editStatus','editScheduleKind','editPurpose','editNote','visitScheduleDay','visitScheduleTime','visitScheduleEndDay','visitScheduleEndTime','editManagementNo','workActualDay','workActualStart','workActualEnd','workActualSummary'];
+    const fields = ['editCompany','editAddress','editPhone','editContact','editRoute','editStatus','editScheduleKind','editPurpose','editNote','visitScheduleDay','visitScheduleTime','visitScheduleEndDay','visitScheduleEndTime','editManagementNo','workActualDay','workActualStart','workActualEnd','workActualSummary','visitSite-buildingName','visitSite-receptionFloor','visitSite-equipmentFloor'];
     function combine(day,time) {
         if (!day && !time) return '';
         if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;

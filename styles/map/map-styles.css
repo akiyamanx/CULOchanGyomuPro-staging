@@ -292,3 +292,7 @@ body.map-focus .today-list-link { display:none; }
 .equipment-history-dialog button { width:auto; flex:none; min-height:44px; }
 .equipment-history-section { border-top:2px solid #bdcde0; margin-top:12px; }
 .equipment-history-card { padding:10px; margin:6px 0; border-radius:8px; background:#eef4fb; overflow-wrap:anywhere; white-space:pre-wrap; }
+
+/* ナビを開く前に、訪問先と受付・設置階を文字で確認できる。 */
+.today-location { margin:2px 0; overflow-wrap:anywhere; white-space:pre-line; }
+.today-quick button.btn { min-height:44px; width:auto; }

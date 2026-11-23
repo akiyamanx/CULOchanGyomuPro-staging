@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="styles/parking.css">
     <link rel="stylesheet" href="styles/parking-workflow.css?v=20261121-3">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600&display=swap">
-    <link rel="stylesheet" href="styles/map/map-styles.css?v=20261123-history-1">
+    <link rel="stylesheet" href="styles/map/map-styles.css?v=20261123-next-2">
     <link rel="stylesheet" href="styles/map/map-expense-styles.css">
     <link rel="stylesheet" href="styles/map/route-order-styles.css">
     <link rel="stylesheet" href="styles/map/workspace-styles.css?v=20261117-1">
@@ -325,7 +325,7 @@
                         <div class="visit-date-fields"><div class="modal-row"><label for="workActualStart">実際の開始時刻</label><input type="time" id="workActualStart"></div><div class="modal-row"><label for="workActualEnd">実際の終了時刻（同日）</label><input type="time" id="workActualEnd"></div></div>
                         <div class="modal-row"><label for="workActualSummary">実際に行った作業・交換部材</label><textarea id="workActualSummary" rows="3" maxlength="1000"></textarea></div>
                     </details>
-                    <details class="visit-contact-details"><summary>会社名・住所・連絡先を編集</summary><div class="modal-row"><label for="editManagementNo">機番（MF番号など）</label><input type="text" id="editManagementNo" maxlength="80" autocapitalize="characters"></div><div class="modal-row"><label for="editCompany">会社名</label><input type="text" id="editCompany"></div><div class="modal-row"><label for="editAddress">住所</label><input type="text" id="editAddress"></div><div class="modal-row"><label for="editPhone">電話番号</label><input type="tel" id="editPhone"></div><div class="modal-row"><label for="editContact">担当者</label><input type="text" id="editContact"></div></details>
+                    <details class="visit-contact-details"><summary>会社名・住所・連絡先を編集</summary><div class="modal-row"><label for="editManagementNo">機番（MF番号など）</label><input type="text" id="editManagementNo" maxlength="80" autocapitalize="characters"></div><div class="modal-row"><label for="editCompany">会社名</label><input type="text" id="editCompany"></div><div class="modal-row"><label for="editAddress">住所</label><input type="text" id="editAddress"></div><div class="modal-row"><label for="visitSite-buildingName">建物名（住所と別に控える場合）</label><input type="text" id="visitSite-buildingName" maxlength="100"></div><div class="modal-row"><label for="visitSite-receptionFloor">受付階</label><input type="text" id="visitSite-receptionFloor" maxlength="24"></div><div class="modal-row"><label for="visitSite-equipmentFloor">機械の設置階</label><input type="text" id="visitSite-equipmentFloor" maxlength="24"></div><div class="modal-row"><label for="editPhone">電話番号</label><input type="tel" id="editPhone"></div><div class="modal-row"><label for="editContact">担当者</label><input type="text" id="editContact"></div></details>
                 </section><section class="visit-calendar" aria-label="Googleカレンダーと訪問予定">
                     <h3>予定を見ながら日時を決める</h3>
                     <div class="google-calendar-actions"><button type="button" class="btn btn-secondary" id="googleCalendarRefresh" hidden>更新</button><button type="button" class="text-link" id="googleCalendarSettings" onclick="AppCore.openSettings('google')">連携設定</button></div>
@@ -480,13 +480,13 @@
     <script src="map/request-import.js?v=20261119-date-review-1"></script>
     <script src="map/geocode-guard.js?v=20261104-3"></script>
     <script src="map/route-pin-style.js?v=20261122-route-pins-2"></script>
-    <script src="map/today-visits.js?v=20261122-today-1"></script>
-    <script src="map/map-core.js?v=20261122-today-1"></script>
+    <script src="map/today-visits.js?v=20261123-next-2"></script>
+    <script src="map/map-core.js?v=20261123-next-2"></script>
     <script src="map/google-calendar-data.js?v=20261019-13"></script>
     <script src="map/google-visit-calendar.js?v=20261019-14"></script>
-    <script src="map/equipment-history.js?v=20261123-1"></script>
-    <script src="map/equipment-history-ui.js?v=20261123-1"></script>
-    <script src="map/visit-planner.js?v=20261123-history-1"></script>
+    <script src="map/equipment-history.js?v=20261123-next-2"></script>
+    <script src="map/equipment-history-ui.js?v=20261123-next-2"></script>
+    <script src="map/visit-planner.js?v=20261123-next-2"></script>
     <script src="map/map-workspace.js?v=20261019-11"></script>
     <script src="map/route-list-pdf.js"></script>
     <script src="map/result-map.js?v=20261105-3"></script>
@@ -497,7 +497,7 @@
     <script src="map/highway-segments.js?v=20261105-2"></script>
     <script src="map/segment-dialog.js?v=20261105-1"></script>
     <script src="map/distance-calc.js?v=20261105-3"></script>
-    <script src="map/ui-actions.js?v=20261123-history-1"></script>
+    <script src="map/ui-actions.js?v=20261123-next-2"></script>
     <script src="map/gcal-panel.js?v=20261019-13"></script>
     <script src="expense/parking-matcher.js?v=20261014-4"></script>
     <script src="expense/etc-document.js?v=20261019-7"></script>
