@@ -74,6 +74,78 @@ const MapCore = (() => {
     }
     const workspace = () => DataStorage.getCurrentWorkspaceId?.();
     const visible = c => RoutePinStyle.visible(c,completedOnly);
+    const siteKey = c => typeof SitePins==='undefined' ? String(c.id) : SitePins.key(c);
+    const siteRows = c => viewCustomers().filter(row=>siteKey(row)===siteKey(c));
+    const findMarker = c => c && markers.find(m=>m.siteKey===siteKey(c));
+    const visibleMembers = m => m.members.filter(visible);
+    const firstByDate = rows => [...rows].sort((a,b)=>(a.appoDate||'9999').localeCompare(b.appoDate||'9999'))[0];
+    function representative(rows) { return firstByDate(rows.filter(visible)) || firstByDate(rows); }
+    function drawMarker(marker, rows, repaint=true) {
+        if (!rows.length) { marker.setVisible(false); return; }
+        marker.members=rows;
+        const c=representative(rows);
+        marker.customData=c;
+        if (repaint) {
+            const routes=markerRoutes(c);
+            marker.setVisible(rows.some(visible));
+            marker.setIcon?.(RoutePinStyle.icon(RoutePinStyle.visitStyle(c,routes,pinMonth()),google.maps));
+            marker.setTitle?.(markerTitle(c,routes,rows.filter(visible).length));
+        }
+    }
+    function navLink(c) {
+        const url = typeof TodayVisits!=='undefined' ? TodayVisits.directions(c.address) : '';
+        return url ? '<a class="info-btn info-btn-nav" href="'+ExpenseImport.escapeHtml(url)+'" target="_blank" rel="noopener noreferrer">ナビを開く</a>' : '';
+    }
+    function unitPanel(c) {
+        const rows=siteRows(c).filter(visible);
+        const esc=ExpenseImport.escapeHtml;
+        let html='';
+        if(rows.length>1) {
+            html+='<details class="pin-site-units"><summary>このピンの訪問 '+rows.length+'件</summary><ul>';
+            for(const row of rows) {
+                html+='<li><span>'+esc(row.managementNo||'機番未登録')+' · '+esc(RoutePinStyle.statusLabel(row.status))+'</span> <button type="button" class="info-btn info-btn-edit" onclick="MapCore.openEdit('+esc(JSON.stringify(row.id))+')">日時・備考</button></li>';
+            }
+            html+='</ul></details>';
+        }
+        if(c.status!=='completed') html+='<button type="button" class="info-btn info-btn-complete" onclick="MapCore.openCompletion('+esc(JSON.stringify(c.id))+')">作業完了を記録</button>';
+        return html;
+    }
+    let completion=null;
+    function openCompletion(id) {
+        const c=viewCustomers().find(row=>row.id===id);
+        const d=document.getElementById('siteCompletionDialog');
+        if(!c || !d || d.open || c.status==='completed') return;
+        const wsOf=row=>row.workspaceId || DataStorage.workspaceOfCustomer?.(row.id) || workspace();
+        const ws=wsOf(c), peers=siteRows(c).filter(row=>row.status!=='completed');
+        const rows=peers.filter(row=>wsOf(row)===ws);
+        completion={ws,rows};
+        const list=document.getElementById('siteCompletionRows');
+        list.replaceChildren();
+        for(const row of rows) {
+            const label=document.createElement('label'), check=document.createElement('input'), text=document.createElement('span');
+            check.type='checkbox'; check.value=String(row.id); check.checked=Boolean(SitePins.keepByDefault(c,row));
+            text.textContent=[row.managementNo||'機番未登録',row.purpose,row.appoDate?.replace('T',' '),row.unitCount>1 && row.unitCount+'台（同じ行）'].filter(Boolean).join(' · ');
+            label.append(check,text); list.append(label);
+        }
+        document.getElementById('siteCompletionScope').textContent=(c.company||'訪問先')+' · 未完了 '+rows.length+'件'
+            +(peers.length!==rows.length?'。別の月の訪問は今回の対象外です。':'');
+        document.getElementById('siteCompletionError').textContent='';
+        d.showModal();
+    }
+    function confirmCompletion() {
+        const d=document.getElementById('siteCompletionDialog');
+        if(!d?.open || !completion) return;
+        const keep=[...d.querySelectorAll('#siteCompletionRows input:checked')].map(x=>x.value);
+        const r=SitePins.apply(AppStorage,completion.ws,completion.rows,keep);
+        if(!r.ok) {
+            document.getElementById('siteCompletionError').textContent=r.reason==='stale'?'訪問の内容が変わりました。閉じて開き直してください。':'保存できませんでした。保存状況を確認してください。';
+            return;
+        }
+        completion=null; d.close();
+        const status=document.getElementById('siteCompletionNotice');
+        if(status) { status.hidden=false; status.textContent=r.done+'件を完了、'+r.kept+'件を未完了のまま残しました。'; }
+        refreshAllMarkers(); RouteManager.updateRoutePanel();
+    }
     function syncMapWorkspace() {
         const id=workspace();
         if(displayWorkspace!==id) { displayWorkspace=id; todayOnly=false; completedOnly=false; }
@@ -116,7 +188,7 @@ const MapCore = (() => {
         completedOnly=next;
         infoWindow?.close();
         document.getElementById('listPickCard')?.remove();
-        markers.forEach(m=>m.setVisible(visible(m.customData)));
+        markers.forEach(m=>drawMarker(m,m.members));
         updateCustomerList();
         fitAfterLocation(fit,viewCustomers());
     }
@@ -190,7 +262,8 @@ const MapCore = (() => {
                 }
             } else if (c.address && visible(c)) uncached.push(c);
         }
-        if (uncached.length) geocodeAndPlot(uncached);
+        const pending=uncached.filter(c=>!findMarker(c));
+        if (pending.length) geocodeAndPlot([...new Map(pending.map(c=>[siteKey(c),c])).values()]);
         fitVisibleMarkers();
     }
 
@@ -209,6 +282,10 @@ const MapCore = (() => {
         try {
 
 
+        for (const m of markers) {
+            const rows=siteRows(m.customData);
+            drawMarker(m,rows);
+        }
         let completed = 0;
         const total = customers.length;
 
@@ -285,19 +362,25 @@ const MapCore = (() => {
     const markerRoutes = c => c?.workspaceId && c.workspaceId!==workspace() ? DataStorage.getRoutes(c.workspaceId)
         : DataStorage.isUndatedCombinedView?.() ? [] : DataStorage.getRoutes();
     const pinMonth = () => todayOnly ? today.day.slice(0,7) : workspace();
-    function markerTitle(customer,routes) {
+    function markerTitle(customer,routes,count=1) {
         const route=routes.find(r=>r.id===customer.routeId);
-        return [customer.company || '不明',RoutePinStyle.statusLabel(customer.status),RoutePinStyle.visitDay(customer)?.iso,route?.name].filter(Boolean).join(' · ');
+        return [customer.company || '不明',count>1 ? '同じ現場 '+count+'件' : RoutePinStyle.statusLabel(customer.status),RoutePinStyle.visitDay(customer)?.iso,route?.name].filter(Boolean).join(' · ');
     }
     function createMarker(customer, latLng) {
+        const rows=siteRows(customer), key=siteKey(customer);
+        const previous=findMarker(customer);
+        if(previous) return previous;
+        const members=rows.length ? rows : [customer];
+        customer=representative(members);
         const routes = markerRoutes(customer);
         const marker = new google.maps.Marker({
             position:latLng,map,visible:visible(customer),
             icon:RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,pinMonth()),google.maps),
-            title:markerTitle(customer,routes)
+            title:markerTitle(customer,routes,members.filter(visible).length)
         });
-        marker.customData=customer;
-        marker.addListener('click', () => { if(visible(marker.customData))showInfoWindow(marker,marker.customData); });
+        marker.siteKey=key;
+        drawMarker(marker,members,false);
+        marker.addListener('click', () => { if(visibleMembers(marker).length)showInfoWindow(marker,marker.customData); });
         markers.push(marker);
         return marker;
     }
@@ -305,7 +388,7 @@ const MapCore = (() => {
     // 測位結果が戻る間に月やアポ状態が変わっても、古い表示を地図に混ぜない。
     function createCurrentMarker(customer, position) {
         const current=viewCustomers().find(c=>c.id===customer.id && c.address===customer.address);
-        if(current && !markers.some(m=>m.customData.id===current.id))createMarker(current,position);
+        if(current && !findMarker(current))createMarker(current,position);
     }
 
     // 吹き出しと情報カードで共通の詳細行(customer は文字列をエスケープ済みのコピー)
@@ -315,7 +398,7 @@ const MapCore = (() => {
         html += `<p>📍 ${customer.address || ''}</p>`;
         if (customer.phone) html += `<p>📞 ${customer.phone}</p>`;
         if (customer.contact) html += `<p>👤 ${customer.contact}</p>`;
-        if (customer.floors && customer.floors.length > 0) html += `<p>🏢 ${customer.floors.join(', ')}</p>`;
+        if (Array.isArray(customer.floors) && customer.floors.length > 0) html += `<p>🏢 ${customer.floors.join(', ')}</p>`;
         if (customer.model) html += `<p>💧 ${customer.model}</p>`;
         if (customer.branch) html += `<p>🏢 営業所: ${customer.branch}</p>`;
         if (customer.equipType) html += `<p>⚙️ 型式: ${customer.equipType}</p>`;
@@ -327,10 +410,11 @@ const MapCore = (() => {
         const esc = ExpenseImport.escapeHtml;
         const statusText = { pending: '未アポ', appointed: 'アポ済み', completed: '完了' };
         const rawId = customer.id;
+        const actions = navLink(customer)+unitPanel(customer);
         const phones = VisitPlanner.phoneNumbers(customer.phone);
         customer = {...customer};
         Object.keys(customer).forEach(key=> { if(typeof customer[key]==='string' && !['appoDate','appoEndDate','status','routeId'].includes(key))customer[key]=esc(customer[key]); });
-        if(customer.floors)customer.floors=customer.floors.map(esc);
+        if(Array.isArray(customer.floors))customer.floors=customer.floors.map(esc);
         const routes = markerRoutes(customer);
         const route = routes.find(r => r.id === customer.routeId);
 
@@ -362,27 +446,14 @@ const MapCore = (() => {
         html += `<div class="info-actions">`;
         html += `<button class="info-btn info-btn-edit" onclick="MapCore.openEdit(${esc(JSON.stringify(rawId))})">日時・備考を編集</button>`;
         phones.forEach((phone,index)=> {html += `<a class="info-btn info-btn-call" href="tel:${esc(phone)}">電話${phones.length>1?' '+(index+1):''}</a>`;});
-        html += `</div></div>`;
+        html += actions + `</div></div>`;
         infoWindow.setContent(html);
         infoWindow.open(map, marker);
     }
 
     function clearMarkers() { markers.forEach(m => m.setMap(null)); markers = []; }
 
-    function updateMarkerColor(customerId) {
-        if(todayOnly){refreshAllMarkers();return;}
-        const customer = findView(customerId);
-        if (!customer) return;
-        const marker = markers.find(m => m.customData && m.customData.id === customerId);
-        if (!marker) return;
-        const routes = markerRoutes(customer);
-        marker.customData=customer;
-        marker.setIcon(RoutePinStyle.icon(RoutePinStyle.visitStyle(customer,routes,pinMonth()),google.maps));
-        marker.setVisible(visible(customer));
-        if(!visible(customer))infoWindow?.close();
-        updateCustomerList();
-        marker.setTitle(markerTitle(customer,routes));
-    }
+    function updateMarkerColor() { refreshAllMarkers(); }
 
     function updateCountBadge() {
         const customers = monthCustomers();
@@ -422,10 +493,10 @@ const MapCore = (() => {
             html += `${RoutePinStyle.swatch(RoutePinStyle.visitStyle(c,rowRoutes,pinMonth()))}`;
             html += `<span class="customer-info">`;
             html += `<span class="customer-name">${esc(c.company || '不明')}`;
-            if (c.managementNo) html += ` <small>${esc(c.managementNo)}</small>`;
             html += `</span>`;
+            if (c.managementNo) html += `<span class="customer-unit-no">${esc(c.managementNo)}</span>`;
             html += `<span class="customer-address">${esc(c.address || '')}`;
-            if (c.floors && c.floors.length > 0) html += ` · ${esc(c.floors.join(','))}`;
+            if (Array.isArray(c.floors) && c.floors.length > 0) html += ` · ${esc(c.floors.join(','))}`;
             html += `</span><span class="customer-meta">${statuses[status]} · ${esc(route ? route.name : 'ルート未割当')}`;
             if (combined && c.workspaceId && DataStorage.workspaceTag) html += ` · <span class="visit-ws-tag">${esc(DataStorage.workspaceTag(c.workspaceId))}</span>`;
             if(todayOnly)html+=` · <strong class="today-row-time">${esc(TodayVisits.timeText(c,today.day,VisitPlanner))}</strong>`;
@@ -479,14 +550,14 @@ const MapCore = (() => {
         }
         const picked=viewCustomers().find(c=>c.id===customerId);
         if(picked && !visible(picked))setCompletedMode(picked.status==='completed',{fit:false});
-        const marker = markers.find(m => m.customData && m.customData.id === customerId);
+        const marker = findMarker(picked || findView(customerId));
         markSelected(customerId);
         if (marker) {
             const old = document.getElementById('listPickCard'); if (old) old.remove();
             revealMap();
             map.setZoom(16);
             map.panTo(marker.getPosition());
-            google.maps.event.trigger(marker, 'click');
+            showInfoWindow(marker,picked || marker.customData);
         } else {
             // 地図が無い/位置が無いときは編集を開かず、地図の場所に簡単な情報カードを出す
             revealMap();
@@ -515,12 +586,13 @@ const MapCore = (() => {
         if (!card) { card = document.createElement('div'); card.id = 'listPickCard'; card.className = 'list-pick-card'; card.setAttribute('role', 'status'); host.appendChild(card); }
         card.innerHTML = `<button type="button" class="list-pick-close" aria-label="閉じる" onclick="this.parentNode.remove()">×</button>`
             + `<div class="list-pick-title">${esc(customer.company || '')}</div>`
-            + (() => { const c = {...customer}; Object.keys(c).forEach(k => { if (typeof c[k] === 'string') c[k] = esc(c[k]); }); if (c.floors) c.floors = c.floors.map(esc); return detailLines(c); })()
+            + (() => { const c = {...customer}; Object.keys(c).forEach(k => { if (typeof c[k] === 'string') c[k] = esc(c[k]); }); if (Array.isArray(c.floors)) c.floors = c.floors.map(esc); return detailLines(c); })()
             + (route ? `<div>🗺️ ${esc(route.name || '')}</div>` : '')
             + `<div>${esc(statusText[customer.status] || '')} · ${esc(RequestParser.scheduleLabel(customer))}</div>`
             + `<div class="list-pick-note">${why}</div>`
             + (canLocate ? `<button type="button" class="info-btn info-btn-locate" onclick="MapCore.locateAndFocus(${esc(JSON.stringify(customer.id))})">📍 地図の位置を取得</button>` : '')
-            + `<button type="button" class="info-btn info-btn-edit" onclick="MapCore.openEdit(${esc(JSON.stringify(customer.id))})">日時・備考を編集</button>`;
+            + `<button type="button" class="info-btn info-btn-edit" onclick="MapCore.openEdit(${esc(JSON.stringify(customer.id))})">日時・備考を編集</button>`
+            + navLink(customer) + unitPanel(customer);
     }
 
     function openEdit(customerId) {
@@ -592,7 +664,7 @@ const MapCore = (() => {
         return !!(cache[c.address] || (c.lat && c.lng));
     }
     function missingPosition(customers) {
-        return (customers || []).filter(c => c && c.address && !hasPosition(c));
+        return [...new Map((customers || []).filter(c => c && c.address && !findMarker(c) && !hasPosition(c)).map(c=>[siteKey(c),c])).values()];
     }
     // 1件の位置を取って保存する。戻り値: 'ok' | 'none'(見つからない・時間切れ) | 'nomap'
     async function locateOne(customer) {
@@ -634,7 +706,7 @@ const MapCore = (() => {
         if (!customer) return;
         showPickCard(customerId, 'busy');
         const r = await locateOne(customer);
-        const marker = markers.find(m => m.customData && m.customData.id === customerId);
+        const marker = findMarker(customer);
         if (r === 'ok' && marker) { updateCountBadge(); updateCustomerList(); focusMarker(customerId); }
         else showPickCard(customerId, r);
     }
@@ -642,7 +714,7 @@ const MapCore = (() => {
     return {
         initMap, mapFailed, geocodeAndPlot, plotAllMarkers, clearMarkers,
         createMarker, updateMarkerColor, focusMarker,
-        openEdit, refreshAllMarkers, locateMissing, locateAndFocus,
+        openEdit, openCompletion, confirmCompletion, refreshAllMarkers, locateMissing, locateAndFocus,
         updateCountBadge, updateCustomerList, toggleCompleted, toggleToday, refreshTodayClock,
         getCurrentEditId: () => currentEditId,
         getMap: () => map, getMarkers: () => markers

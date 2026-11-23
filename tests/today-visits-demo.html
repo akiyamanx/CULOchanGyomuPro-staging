@@ -2,7 +2,7 @@
 <html lang="ja"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>「今日だけ」の操作見本</title>
-<link rel="stylesheet" href="../styles/map/map-styles.css?v=20261123-next-2">
+<link rel="stylesheet" href="../styles/map/map-styles.css?v=20261123-sites-1">
 <style>
 body{background:#f4f7fa;color:#182532;font:16px/1.55 system-ui,sans-serif;padding:1rem;margin:auto;max-width:660px}
 h1{font-size:1.5rem;margin:0} h2{font-size:1.15rem;margin:1rem 0 .5rem}
@@ -34,9 +34,16 @@ h1{font-size:1.5rem;margin:0} h2{font-size:1.15rem;margin:1rem 0 .5rem}
 <path fill="none" stroke="#edc775" stroke-width="6" d="M-5 126Q85 89 167 112T332 102L426 61"/>
 </svg>
 </div>
-<div id="customerList"></div><p id="sampleDetail" role="status">ピンを押すとここに詳細が出ます。</p>
+<div id="customerList"></div><div id="sampleDetail" aria-label="ピンの詳細">ピンを押すとここに詳細が出ます。</div>
 <span id="countBadge" hidden></span><div id="mapSetup" hidden></div>
-</main><dialog id="equipmentHistoryDialog" class="equipment-history-dialog" aria-labelledby="equipmentHistoryTitle">
+<p id="siteCompletionNotice" role="status" hidden></p></main><dialog id="siteCompletionDialog" class="equipment-history-dialog site-completion" aria-labelledby="siteCompletionTitle">
+        <header><h2 id="siteCompletionTitle">作業完了を記録</h2><button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">閉じる</button></header>
+        <p id="siteCompletionScope"></p>
+        <p><strong>作業できなかった機体だけにチェックしてください。</strong> チェックした機体は未完了のまま残ります。</p>
+        <div id="siteCompletionRows"></div>
+        <p id="siteCompletionError" role="alert"></p>
+        <button type="button" class="btn btn-primary" onclick="MapCore.confirmCompletion()">チェックしていない機体を完了</button>
+    </dialog><dialog id="equipmentHistoryDialog" class="equipment-history-dialog" aria-labelledby="equipmentHistoryTitle">
         <header><h2 id="equipmentHistoryTitle">機番の履歴</h2><button class="btn btn-secondary" type="button" id="equipmentHistoryClose">閉じる</button></header>
         <p>業務プロに保存した訪問を、月をまたいで確認できます。支給タブレットのデータやメールを自動取得する機能ではありません。</p>
         <form id="equipmentHistoryForm"><label for="equipmentHistorySerial">機番（MF番号）</label><div><input id="equipmentHistorySerial" type="text" maxlength="30" autocapitalize="characters" placeholder="MF123456" autofocus><button type="submit" class="btn btn-primary">検索</button></div></form>
@@ -48,11 +55,13 @@ h1{font-size:1.5rem;margin:0} h2{font-size:1.15rem;margin:1rem 0 .5rem}
 <script src="../map/visit-planner.js"></script>
 <script src="../map/equipment-history.js"></script>
 <script src="../map/equipment-history-ui.js"></script>
-<script src="../map/today-visits.js?v=20261123-next-2"></script>
+<script src="../map/today-visits.js?v=20261123-sites-1"></script>
 <script>
 TodayVisits.clock=()=>({day:"2026-12-03",time:"08:00"}); // 架空デモの日時だけ固定
 const visits=[
  {id:'a',company:'青空工業（見本）',status:'appointed',appoDate:'2026-12-03T10:00',phone:'03-0000-0000',address:'架空区1丁目2番3号 架空センターAIR（見本）',receptionFloor:'16階',equipmentFloor:'15階',managementNo:'MF999991',purpose:'定期点検',filter:'標準フィルター',lat:30,lng:34},
+ {id:'a2',company:'青空工業（見本）②',status:'appointed',appoDate:'2026-12-03T10:00',address:'架空区1丁目2番3号 架空センターAIR（見本）',managementNo:'MF999992',purpose:'定期点検',lat:30,lng:34},
+ {id:'a3',company:'青空工業（見本）③',status:'appointed',appoDate:'2026-12-03T10:00',address:'架空区1丁目2番3号 架空センターAIR（見本）',managementNo:'MF999993',purpose:'定期点検',lat:30,lng:34},
  {id:'b',company:'緑町サービス（見本）',status:'appointed',appoDate:'2026-12-03T11:30',address:'架空区1丁目2番8号 架空センター（見本）',lat:57,lng:56},
  {id:'c',company:'みなと商事（見本）',status:'pending',routeId:'route_27',lat:72,lng:24},
  {id:'d',company:'さくら設備（見本）',status:'completed',appoDate:'2026-12-03T07:30',lat:28,lng:68},
@@ -60,7 +69,8 @@ const visits=[
  {id:'f',company:'北町商事（見本）',status:'completed',appoDate:'2026-12-05T09:00',lat:66,lng:79}
 ];
 const historical=[{id:'pre',company:'青空工業（見本）',status:'completed',appoDate:'2026-11-03T10:00',address:'架空区旧住所（見本）',managementNo:'MF999991',filter:'旧依頼の部材',workActual:{day:'2026-11-04',start:'10:30',end:'11:00',summary:'実際はプレフィルターとUVランプを交換（見本）'}}];
-const AppStorage={getItem:k=>k==='mm_workspaces'?'[{"id":"2026-11"},{"id":"2026-12"}]':null,keys:()=>[]};
+const AppStorage={getItem:k=>k==='mm_workspaces'?'[{"id":"2026-11"},{"id":"2026-12"}]':k==='mm_customers_2026-12'?JSON.stringify(visits):null,keys:()=>[],
+ setItem(k,value){if(k==='mm_customers_2026-12')visits.splice(0,visits.length,...JSON.parse(value));}};
 const DataStorage={getSettings:()=>({}),getCustomers:()=>visits,getRoutes:()=>[{id:'route_27',name:'ルート27',color:'#7b3270'}],
  getCurrentWorkspaceId:()=> '2026-12',getWorkspaces:()=>[{id:'2026-12'}],getCustomersForWorkspace:ws=>ws==="2026-12"?visits:ws==="2026-11"?historical:[],getGeoCache:()=>({}),setGeoCache(){}};
 const RouteManager={updateRoutePanel(){}};
@@ -69,7 +79,7 @@ const RequestParser={scheduleLabel:c=>c.appoDate?.slice(0,10)||'日付未定'};
 
 const google={maps:{Map:class{fitBounds(){}},Geocoder:class{},Point:class{},Size:class{},
  LatLng:class{constructor(lat,lng){Object.assign(this,{lat,lng});}},LatLngBounds:class{extend(){}},
- InfoWindow:class{setContent(html){this.html=html;}open(){document.getElementById('sampleDetail').textContent=new DOMParser().parseFromString(this.html,'text/html').querySelector('h3').textContent;}close(){document.getElementById('sampleDetail').textContent='ピンを押すとここに詳細が出ます。';}},
+ InfoWindow:class{setContent(html){this.html=html;}open(){document.getElementById('sampleDetail').innerHTML=this.html;}close(){document.getElementById('sampleDetail').textContent='ピンを押すとここに詳細が出ます。';}},
  Marker:class{constructor(o){
     this.position=o.position;
     this.el=document.createElement('button');this.el.type='button';this.el.className='demo-pin';
@@ -82,8 +92,12 @@ const google={maps:{Map:class{fitBounds(){}},Geocoder:class{},Point:class{},Size
  }}};
 </script>
 <script src="../expense/expense-import.js"></script>
-<script src="../map/map-core.js?v=20261123-next-2"></script>
+<script src="../map/site-pins.js?v=20261123-sites-1"></script>
+<script src="../map/map-core.js?v=20261123-sites-1"></script>
 <script>
+document.getElementById('sampleDetail').addEventListener('click',event=>{
+    if(event.target.closest('a')) { event.preventDefault(); }
+});
 document.getElementById('mapTodayCard').addEventListener('click',event=>{
     if(event.target.closest('.today-quick a')) {
         event.preventDefault();

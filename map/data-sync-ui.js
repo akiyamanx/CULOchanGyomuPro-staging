@@ -71,6 +71,7 @@ const DataSyncUI = (() => {
     // 入力中か(文字を打っている・訪問先の編集画面などが開いている)。このときは他端末の変更を書き込まない。
     function isEditing() {
         if (typeof document === 'undefined') return false;
+        if (document.getElementById('siteCompletionDialog')?.open) return true;
         const a = document.activeElement;
         if (a && !(bar && bar.contains(a))) {
             const tag = a.tagName;

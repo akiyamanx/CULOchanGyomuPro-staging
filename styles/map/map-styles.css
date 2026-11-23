@@ -296,3 +296,16 @@ body.map-focus .today-list-link { display:none; }
 /* ナビを開く前に、訪問先と受付・設置階を文字で確認できる。 */
 .today-location { margin:2px 0; overflow-wrap:anywhere; white-space:pre-line; }
 .today-quick button.btn { min-height:44px; width:auto; }
+
+/* 現場を1ピンにまとめても、機番は個々の訪問行で確認できる。 */
+.customer-unit-no { display:block; font-size:.8em; color:#35536b; overflow-wrap:anywhere; }
+.info-btn-nav,.info-btn-complete { display:inline-flex; align-items:center; min-height:44px; text-decoration:none; }
+.info-btn-nav { background:#e4eef9; color:#174775; }
+.info-btn-complete { background:#e5f3ea; color:#145134; }
+.pin-site-units { flex-basis:100%; margin-block:5px; }
+.pin-site-units ul { padding-inline-start:20px; }
+.pin-site-units button { min-height:40px; margin-block:3px; }
+.site-completion label { display:flex; gap:10px; align-items:center; min-height:44px; padding:5px 2px; border-bottom:1px solid #d5e1eb; }
+.site-completion input[type=checkbox] { min-height:0; width:20px; height:20px; flex:0 0 20px; }
+.site-completion label span { overflow-wrap:anywhere; }
+.site-completion #siteCompletionError:not(:empty) { color:#9b2924; font-weight:700; }
