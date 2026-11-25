@@ -12,7 +12,7 @@
 // 本番とお試し版(/CULOchanGyomuPro-staging/)は同じオリジンでCache Storageを共有するため、名前で分ける
 const IS_STAGING = /^\/CULOchanGyomuPro-staging\//.test((self.location && self.location.pathname) || '');
 const CACHE_PREFIX = IS_STAGING ? 'gyomupro-stg-' : 'gyomupro-';
-const CACHE_NAME = CACHE_PREFIX + (IS_STAGING ? 'v113' : 'v82');
+const CACHE_NAME = CACHE_PREFIX + (IS_STAGING ? 'v114' : 'v82');
 // 自分(本番/お試し版)のキャッシュだけを古い版の掃除対象にする。相手側のキャッシュは消さない
 function ownCache(name) {
     if (IS_STAGING) return name.startsWith('gyomupro-stg-');
@@ -39,6 +39,7 @@ const ASSETS = [
     './styles/settings.css',
     './styles/request-import.css',
     './styles/mail-box.css',
+    './styles/dp400-original.css',
     './styles/etc-workflow.css',
     './shared/settings-panel.js',
     './shared/app-core.js',
@@ -81,6 +82,8 @@ const ASSETS = [
     './map/gmail-transport.js',
     './map/gmail-source.js',
     './map/gmail-import.js',
+    './map/dp400-original.js',
+    './map/dp400-original-ui.js',
     './map/gmail-senders.js',
     './map/mail-box-demo.js',
     './map/mail-gmail-links.js',

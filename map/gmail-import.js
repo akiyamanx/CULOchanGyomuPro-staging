@@ -139,7 +139,7 @@ const GmailImport = (() => {
                 if (done.has(bases[i])) { local.counts.skippedKnown++; continue; }
                 anyNew = true;
                 if (signal && signal.aborted) return { stop: true, code: 'aborted' };
-                const r = await buildAttachment(a, msg.id, out, local, signal);
+                const r = await buildAttachment(a, msg, out, local, signal);
                 if (r.stop || r.failed) { out.bytes += local.bytes; return r; }
                 atts.push(r.att);
             }
@@ -153,7 +153,8 @@ const GmailImport = (() => {
             return { mail: { messageId: msg.id, threadId: typeof msg.threadId === 'string' ? msg.threadId : '', subject: msg.subject, from: msg.from, receivedDate: msg.internalDateMs ? tokyoDate(msg.internalDateMs) : '', senderKind: 'registered', source: 'gmail', attachments: atts } };
         }
 
-        async function buildAttachment(a, msgId, out, local, signal) {
+        async function buildAttachment(a, msg, out, local, signal) {
+            const msgId = msg && msg.id;
             const C = local.counts, key = a.partKey, name = a.fileName;
             const ext = (name.match(/\.([A-Za-z0-9]{1,5})$/) || [])[1];
             const mime = String(a.mimeType || '').toLowerCase();
@@ -180,6 +181,11 @@ const GmailImport = (() => {
             C.downloaded++; local.bytes += Math.max(a.size, bytes.length);
             // 4) 中身の確認(拡張子だけを信じない)
             if (!MAGIC[kind](bytes)) return unread(kind, 'content_mismatch', 'blocked');
+            // 4b) DP-400月次リストの原本を、解析の前に端末へ残す(失敗しても取り込みは続ける)
+            if (typeof Dp400Original !== 'undefined' && Dp400Original.isListMail(msg && msg.subject, name)) {
+                try { await Dp400Original.save({ subject: msg.subject, fileName: name, mime, bytes, messageId: msgId, partKey: key, receivedMs: msg.internalDateMs, kind }); }
+                catch (e) { /* 原本の保存失敗は依頼の取り込みを止めない */ }
+            }
             // 5) 解析
             let res;
             try { res = await reader.readForMail(makeFile(bytes, name, mime), () => {}, signal); }
