@@ -180,6 +180,140 @@ const Dp400Original = (() => {
 
     let _default = null;
     const def = () => (_default || (_default = create()));
+    const COL_PX = 8;
+    const COL_PAD = 12;
+    const COL_MIN = 36;
+    const COL_MAX = 480;
+    const COL_EST_CAP = 36;
+    function charWidth(s) {
+        let w = 0;
+        const t = String(s == null ? '' : s);
+        for (let i = 0; i < t.length; i++) w += t.charCodeAt(i) > 255 ? 2 : 1;
+        return w;
+    }
+    function metaColPx(col) {
+        if (!col || typeof col !== 'object') return 0;
+        if (Number.isFinite(col.wpx) && col.wpx > 0) return col.wpx;
+        if (Number.isFinite(col.wch) && col.wch > 0) return col.wch * COL_PX;
+        if (Number.isFinite(col.width) && col.width > 0) return col.width * COL_PX;
+        return 0;
+    }
+    function columnWidths(rows, colsMeta) {
+        const list = Array.isArray(rows) ? rows : [];
+        const meta = Array.isArray(colsMeta) ? colsMeta : [];
+        const maxCols = Math.max(1, meta.length, ...list.map(r => Array.isArray(r) ? r.length : 0));
+        const out = [];
+        for (let i = 0; i < maxCols; i++) {
+            let px = metaColPx(meta[i]);
+            if (!(px > 0)) {
+                let max = 4;
+                for (let r = 0; r < list.length; r++) {
+                    const cell = list[r] && list[r][i];
+                    max = Math.max(max, Math.min(COL_EST_CAP, charWidth(cell)));
+                }
+                px = max * COL_PX + COL_PAD;
+            }
+            out.push(Math.max(COL_MIN, Math.min(COL_MAX, Math.round(px))));
+        }
+        return out;
+    }
+    const Viewport = {
+        MAX_SCALE: 8,
+        MIN_FLOOR: 0.1,
+        STEP: 1.25,
+        fitScale(contentW, contentH, viewW, viewH) {
+            if (!(contentW > 0 && contentH > 0 && viewW > 0 && viewH > 0)) return 1;
+            return Math.max(this.MIN_FLOOR, Math.min(viewW / contentW, viewH / contentH, 1));
+        },
+        clampScale(scale, fit) {
+            const min = Number.isFinite(fit) && fit > 0 ? Math.max(this.MIN_FLOOR, fit) : this.MIN_FLOOR;
+            const s = Number(scale);
+            if (!Number.isFinite(s)) return min;
+            return Math.min(this.MAX_SCALE, Math.max(min, s));
+        },
+        clampPan(tx, ty, scale, contentW, contentH, viewW, viewH) {
+            const s = Number(scale) > 0 ? Number(scale) : 1;
+            const w = contentW * s;
+            const h = contentH * s;
+            let x = Number(tx);
+            let y = Number(ty);
+            if (!Number.isFinite(x)) x = 0;
+            if (!Number.isFinite(y)) y = 0;
+            if (w <= viewW) x = (viewW - w) / 2;
+            else x = Math.min(0, Math.max(viewW - w, x));
+            if (h <= viewH) y = 0;
+            else y = Math.min(0, Math.max(viewH - h, y));
+            return { x, y };
+        },
+        zoomAt(tx, ty, scale, nextScale, cx, cy) {
+            const s = Number(scale) > 0 ? Number(scale) : 1;
+            const n = Number(nextScale) > 0 ? Number(nextScale) : s;
+            return {
+                tx: cx - (cx - tx) * (n / s),
+                ty: cy - (cy - ty) * (n / s),
+                scale: n
+            };
+        },
+        stepScale(scale, direction, fit) {
+            const factor = direction > 0 ? this.STEP : (1 / this.STEP);
+            return this.clampScale((Number(scale) > 0 ? Number(scale) : 1) * factor, fit);
+        },
+        pinchScale(startScale, startDist, dist, fit) {
+            if (!(startDist > 0) || !Number.isFinite(dist)) return this.clampScale(startScale, fit);
+            return this.clampScale((Number(startScale) > 0 ? Number(startScale) : 1) * (dist / startDist), fit);
+        },
+        distance(a, b) {
+            return Math.hypot(((a && a.x) || 0) - ((b && b.x) || 0), ((a && a.y) || 0) - ((b && b.y) || 0));
+        },
+        midpoint(a, b) {
+            return { x: (((a && a.x) || 0) + ((b && b.x) || 0)) / 2, y: (((a && a.y) || 0) + ((b && b.y) || 0)) / 2 };
+        }
+    };
+    function sheetMerges(raw) {
+        const out = [];
+        if (!Array.isArray(raw)) return out;
+        raw.forEach(m => {
+            const r = m && (m.r != null ? m.r : m.s && m.s.r);
+            const c = m && (m.c != null ? m.c : m.s && m.s.c);
+            if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) return;
+            const rowspan = Math.max(1, Number(m.rowspan) || (m.e && Number.isInteger(m.e.r) ? m.e.r - r + 1 : 1));
+            const colspan = Math.max(1, Number(m.colspan) || (m.e && Number.isInteger(m.e.c) ? m.e.c - c + 1 : 1));
+            out.push({ r, c, rowspan, colspan });
+        });
+        return out;
+    }
+    function withTitleSpan(rows, colCount, merges) {
+        const list = Array.isArray(merges) ? merges.slice() : [];
+        const first = Array.isArray(rows) && rows[0] ? rows[0] : [];
+        const filled = [];
+        for (let i = 0; i < Math.max(first.length, colCount); i++) {
+            if (first[i] != null && String(first[i]) !== '') filled.push(i);
+        }
+        if (colCount >= 3 && filled.length === 1 && filled[0] === 0 && !list.some(m => m.r === 0 && m.c === 0)) {
+            list.push({ r: 0, c: 0, rowspan: 1, colspan: colCount });
+        }
+        return list;
+    }
+    function mergeLookup(merges) {
+        const skip = Object.create(null);
+        const start = Object.create(null);
+        (merges || []).forEach(m => {
+            const key = m.r + ':' + m.c;
+            start[key] = { rowspan: m.rowspan, colspan: m.colspan };
+            for (let rr = m.r; rr < m.r + m.rowspan; rr++) {
+                for (let cc = m.c; cc < m.c + m.colspan; cc++) {
+                    if (rr === m.r && cc === m.c) continue;
+                    skip[rr + ':' + cc] = 1;
+                }
+            }
+        });
+        return { skip, start };
+    }
+    function trimTrailingRows(rows) {
+        const list = Array.isArray(rows) ? rows.slice() : [];
+        while (list.length && (!Array.isArray(list[list.length - 1]) || list[list.length - 1].every(c => c == null || String(c) === ''))) list.pop();
+        return list;
+    }
     function rowsFromBytes(bytes, kind, fileName) {
         if (typeof XLSX === 'undefined' || !XLSX.read) return { ok: false, code: 'no_xlsx', sheets: [] };
         if (kind === 'pdf') return { ok: false, code: 'pdf', sheets: [] };
@@ -187,8 +321,12 @@ const Dp400Original = (() => {
             const book = XLSX.read(bytes, { type: 'array', cellDates: true, raw: false });
             const names = book.SheetNames || [];
             const sheets = names.map(name => {
-                const rows = XLSX.utils.sheet_to_json(book.Sheets[name], { header: 1, raw: false, defval: '', blankrows: false });
-                return { name: String(name || '').slice(0, 80), rows: Array.isArray(rows) ? rows : [] };
+                const sh = book.Sheets[name];
+                const rows = trimTrailingRows(XLSX.utils.sheet_to_json(sh, { header: 1, raw: false, defval: '', blankrows: true }));
+                const list = Array.isArray(rows) ? rows : [];
+                const colWidths = columnWidths(list, sh && sh['!cols']);
+                const merges = withTitleSpan(list, colWidths.length, sheetMerges(sh && sh['!merges']));
+                return { name: String(name || '').slice(0, 80), rows: list, colWidths, merges };
             }).filter(s => s.rows.length);
             return { ok: true, sheets, fileName };
         } catch (e) {
@@ -213,13 +351,42 @@ const Dp400Original = (() => {
             wrap.className = 'dp400-table-wrap';
             const table = document.createElement('table');
             table.className = 'dp400-table';
-            sheet.rows.forEach((row, ri) => {
+            const rows = Array.isArray(sheet.rows) ? sheet.rows : [];
+            const widths = Array.isArray(sheet.colWidths) && sheet.colWidths.length
+                ? sheet.colWidths
+                : columnWidths(rows, sheet.cols);
+            const colCount = Math.max(1, widths.length, ...rows.map(r => Array.isArray(r) ? r.length : 0));
+            const merges = withTitleSpan(rows, colCount, sheetMerges(sheet.merges));
+            const look = mergeLookup(merges);
+            const colgroup = document.createElement('colgroup');
+            let total = 0;
+            for (let c = 0; c < colCount; c++) {
+                const col = document.createElement('col');
+                const w = Number(widths[c]) > 0 ? Math.round(widths[c]) : columnWidths([[]], [])[0];
+                col.style.width = w + 'px';
+                colgroup.appendChild(col);
+                total += w;
+            }
+            table.appendChild(colgroup);
+            table.style.width = total + 'px';
+            table.style.tableLayout = 'fixed';
+            let headerRi = 0;
+            for (let i = 0; i < rows.length; i++) {
+                const filled = (Array.isArray(rows[i]) ? rows[i] : []).filter(c => c != null && String(c) !== '').length;
+                if (filled >= 3) { headerRi = i; break; }
+            }
+            rows.forEach((row, ri) => {
                 const tr = document.createElement('tr');
                 const cells = Array.isArray(row) ? row : [];
-                const tag = ri === 0 ? 'th' : 'td';
-                const width = Math.max(cells.length, 1);
-                for (let c = 0; c < width; c++) {
+                const tag = ri === headerRi ? 'th' : 'td';
+                for (let c = 0; c < colCount; c++) {
+                    if (look.skip[ri + ':' + c]) continue;
                     const cell = document.createElement(tag);
+                    const sp = look.start[ri + ':' + c];
+                    if (sp) {
+                        if (sp.rowspan > 1) cell.rowSpan = sp.rowspan;
+                        if (sp.colspan > 1) cell.colSpan = sp.colspan;
+                    }
                     cell.textContent = cells[c] == null || cells[c] === '' ? '' : String(cells[c]);
                     tr.appendChild(cell);
                 }
@@ -263,7 +430,7 @@ const Dp400Original = (() => {
 
     return {
         LIST_RE, monthOf, isListMail, isExtra, kindOf, buildListQuery, recId, create,
-        rowsFromBytes, fillTable, fetchFromGmail,
+        columnWidths, sheetMerges, withTitleSpan, viewport: Viewport, rowsFromBytes, fillTable, fetchFromGmail,
         save: (...a) => def().save(...a),
         has: (...a) => def().has(...a),
         listMonths: (...a) => def().listMonths(...a),

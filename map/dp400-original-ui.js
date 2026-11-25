@@ -1,7 +1,15 @@
 // マップ画面の「原本を見る」。DP-400月次リストの原本を端末内から表示する。
 // 表のセルは textContent で入れる(ファイルの値をHTMLとして解釈しない)。ログに中身は出さない。
+// 開いたときは表全体が画面に収まる縮小表示。ピンチと＋−で拡大縮小、拡大時はドラッグで移動できる。
 const Dp400OriginalUI = (() => {
     let overlay, monthSel, filesEl, viewEl, statusEl, downloadBtn, fetchBtn, closeBtn, objectUrl = '', abort = null, currentId = '';
+    let zoomInBtn, zoomOutBtn, zoomFitBtn;
+    let vpEl = null, surfaceEl = null, ro = null;
+    let zoom = { scale: 1, tx: 0, ty: 0, fit: 1, cw: 0, ch: 0, vw: 0, vh: 0 };
+    const pointers = new Map();
+    let pinch = null, pan = null;
+
+    const vpMath = () => (typeof Dp400Original !== 'undefined' && Dp400Original.viewport) ? Dp400Original.viewport : null;
 
     const say = (text, kind) => {
         if (!statusEl) return;
@@ -29,6 +37,165 @@ const Dp400OriginalUI = (() => {
         if (typeof MailBoxUI !== 'undefined' && typeof MailBoxUI.gmailIfConnected === 'function') return MailBoxUI.gmailIfConnected();
         return null;
     }
+    function setZoomEnabled(on) {
+        [zoomInBtn, zoomOutBtn, zoomFitBtn].forEach(btn => { if (btn) btn.disabled = !on; });
+    }
+    function clearViewport() {
+        if (ro) { try { ro.disconnect(); } catch (e) { /* 無視 */ } ro = null; }
+        pointers.clear();
+        pinch = null;
+        pan = null;
+        vpEl = null;
+        surfaceEl = null;
+        setZoomEnabled(false);
+    }
+    function applyTransform() {
+        if (!surfaceEl) return;
+        surfaceEl.style.transform = 'translate(' + zoom.tx + 'px, ' + zoom.ty + 'px) scale(' + zoom.scale + ')';
+    }
+    function localPoint(clientX, clientY) {
+        const r = vpEl.getBoundingClientRect();
+        return { x: clientX - r.left, y: clientY - r.top };
+    }
+    function measureAndFit(reset) {
+        const math = vpMath();
+        if (!vpEl || !surfaceEl || !math) return;
+        const r = vpEl.getBoundingClientRect();
+        zoom.vw = r.width;
+        zoom.vh = r.height;
+        zoom.cw = Math.max(surfaceEl.scrollWidth, surfaceEl.offsetWidth, 1);
+        zoom.ch = Math.max(surfaceEl.scrollHeight, surfaceEl.offsetHeight, 1);
+        const fit = math.fitScale(zoom.cw, zoom.ch, zoom.vw, zoom.vh);
+        const wasFit = Math.abs(zoom.scale - zoom.fit) < 0.02;
+        zoom.fit = fit;
+        if (reset || wasFit) {
+            zoom.scale = fit;
+            const p = math.clampPan(0, 0, fit, zoom.cw, zoom.ch, zoom.vw, zoom.vh);
+            zoom.tx = p.x;
+            zoom.ty = p.y;
+        } else {
+            zoom.scale = math.clampScale(zoom.scale, fit);
+            const p = math.clampPan(zoom.tx, zoom.ty, zoom.scale, zoom.cw, zoom.ch, zoom.vw, zoom.vh);
+            zoom.tx = p.x;
+            zoom.ty = p.y;
+        }
+        applyTransform();
+    }
+    function afterLayout(fn) {
+        requestAnimationFrame(() => requestAnimationFrame(fn));
+    }
+    function watchViewport() {
+        if (ro) { try { ro.disconnect(); } catch (e) { /* 無視 */ } ro = null; }
+        if (typeof ResizeObserver === 'undefined' || !vpEl) return;
+        ro = new ResizeObserver(() => { if (vpEl) measureAndFit(false); });
+        ro.observe(vpEl);
+    }
+    function mountViewport() {
+        clearViewport();
+        viewEl.replaceChildren();
+        const vp = document.createElement('div');
+        vp.className = 'dp400-viewport';
+        vp.id = 'dp400Viewport';
+        const surface = document.createElement('div');
+        surface.className = 'dp400-viewport-surface';
+        vp.appendChild(surface);
+        viewEl.appendChild(vp);
+        vpEl = vp;
+        surfaceEl = surface;
+        zoom = { scale: 1, tx: 0, ty: 0, fit: 1, cw: 0, ch: 0, vw: 0, vh: 0 };
+        setZoomEnabled(true);
+        watchViewport();
+        return surface;
+    }
+    function setScaleAt(next, cx, cy) {
+        const math = vpMath();
+        if (!math || !vpEl) return;
+        const clamped = math.clampScale(next, zoom.fit);
+        const z = math.zoomAt(zoom.tx, zoom.ty, zoom.scale, clamped, cx, cy);
+        const p = math.clampPan(z.tx, z.ty, z.scale, zoom.cw, zoom.ch, zoom.vw, zoom.vh);
+        zoom.scale = z.scale;
+        zoom.tx = p.x;
+        zoom.ty = p.y;
+        applyTransform();
+    }
+    function zoomBy(dir) {
+        const math = vpMath();
+        if (!math || !vpEl) return;
+        setScaleAt(math.stepScale(zoom.scale, dir, zoom.fit), zoom.vw / 2, zoom.vh / 2);
+    }
+    function fitAll() {
+        measureAndFit(true);
+    }
+    function onPointerDown(ev) {
+        if (!vpEl || !vpEl.contains(ev.target)) return;
+        ev.preventDefault();
+        try { vpEl.setPointerCapture(ev.pointerId); } catch (e) { /* 無視 */ }
+        pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        if (pointers.size >= 2) {
+            const pts = [...pointers.values()];
+            const math = vpMath();
+            pinch = {
+                startScale: zoom.scale,
+                startDist: math.distance(pts[0], pts[1]),
+                startTx: zoom.tx,
+                startTy: zoom.ty,
+                origin: localPoint(((pts[0].x + pts[1].x) / 2), ((pts[0].y + pts[1].y) / 2))
+            };
+            pan = null;
+            vpEl.classList.add('is-panning');
+        } else {
+            pan = { x: ev.clientX, y: ev.clientY, tx: zoom.tx, ty: zoom.ty };
+            pinch = null;
+            vpEl.classList.add('is-panning');
+        }
+    }
+    function onPointerMove(ev) {
+        if (!pointers.has(ev.pointerId) || !vpEl) return;
+        ev.preventDefault();
+        pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        const math = vpMath();
+        if (!math) return;
+        if (pinch && pointers.size >= 2) {
+            const pts = [...pointers.values()];
+            const dist = math.distance(pts[0], pts[1]);
+            const mid = localPoint((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+            const next = math.pinchScale(pinch.startScale, pinch.startDist, dist, zoom.fit);
+            const z = math.zoomAt(pinch.startTx, pinch.startTy, pinch.startScale, next, pinch.origin.x, pinch.origin.y);
+            z.tx += mid.x - pinch.origin.x;
+            z.ty += mid.y - pinch.origin.y;
+            const p = math.clampPan(z.tx, z.ty, z.scale, zoom.cw, zoom.ch, zoom.vw, zoom.vh);
+            zoom.scale = z.scale;
+            zoom.tx = p.x;
+            zoom.ty = p.y;
+            applyTransform();
+        } else if (pan && pointers.size === 1) {
+            const p = math.clampPan(pan.tx + (ev.clientX - pan.x), pan.ty + (ev.clientY - pan.y), zoom.scale, zoom.cw, zoom.ch, zoom.vw, zoom.vh);
+            zoom.tx = p.x;
+            zoom.ty = p.y;
+            applyTransform();
+        }
+    }
+    function onPointerUp(ev) {
+        if (!pointers.has(ev.pointerId)) return;
+        pointers.delete(ev.pointerId);
+        if (pointers.size < 2) pinch = null;
+        if (pointers.size === 1) {
+            const pt = [...pointers.values()][0];
+            pan = { x: pt.x, y: pt.y, tx: zoom.tx, ty: zoom.ty };
+        } else {
+            pan = null;
+            if (vpEl) vpEl.classList.remove('is-panning');
+        }
+    }
+    function onWheel(ev) {
+        if (!vpEl || !vpEl.contains(ev.target)) return;
+        ev.preventDefault();
+        const math = vpMath();
+        if (!math) return;
+        const factor = ev.deltaY < 0 ? 1.08 : (1 / 1.08);
+        const loc = localPoint(ev.clientX, ev.clientY);
+        setScaleAt(zoom.scale * factor, loc.x, loc.y);
+    }
     async function refreshMonths(prefer) {
         const months = await Dp400Original.listMonths();
         const pick = prefer || currentWorkspaceMonth();
@@ -49,6 +216,7 @@ const Dp400OriginalUI = (() => {
         revoke();
         currentId = '';
         filesEl.replaceChildren();
+        clearViewport();
         viewEl.replaceChildren();
         downloadBtn.disabled = true;
         const list = await Dp400Original.listForMonth(monthId);
@@ -79,6 +247,7 @@ const Dp400OriginalUI = (() => {
         revoke();
         currentId = id;
         const rec = await Dp400Original.get(id);
+        clearViewport();
         viewEl.replaceChildren();
         if (!rec || !rec.bytes) { say('原本を開けませんでした。', 'warn'); downloadBtn.disabled = true; return; }
         downloadBtn.disabled = false;
@@ -102,7 +271,9 @@ const Dp400OriginalUI = (() => {
             viewEl.appendChild(p);
             return;
         }
-        Dp400Original.fillTable(viewEl, parsed.sheets);
+        const surface = mountViewport();
+        Dp400Original.fillTable(surface, parsed.sheets);
+        afterLayout(() => measureAndFit(true));
     }
     function downloadCurrent() {
         if (!currentId) return;
@@ -152,6 +323,7 @@ const Dp400OriginalUI = (() => {
     function close() {
         if (abort) { try { abort.abort(); } catch (e) { /* 無視 */ } abort = null; }
         revoke();
+        clearViewport();
         if (overlay) { overlay.hidden = true; overlay.style.display = 'none'; }
         document.body.classList.remove('dp400-original-open');
     }
@@ -164,6 +336,9 @@ const Dp400OriginalUI = (() => {
         downloadBtn = document.getElementById('dp400OriginalDownload');
         fetchBtn = document.getElementById('dp400OriginalFetch');
         closeBtn = document.getElementById('dp400OriginalClose');
+        zoomInBtn = document.getElementById('dp400ZoomIn');
+        zoomOutBtn = document.getElementById('dp400ZoomOut');
+        zoomFitBtn = document.getElementById('dp400ZoomFit');
         const openBtn = document.getElementById('dp400OriginalBtn');
         if (!overlay || !monthSel || !openBtn) return;
         openBtn.addEventListener('click', open);
@@ -172,6 +347,17 @@ const Dp400OriginalUI = (() => {
         monthSel.addEventListener('change', () => { showMonth(monthSel.value).catch(() => say('表示できませんでした。', 'warn')); });
         downloadBtn.addEventListener('click', downloadCurrent);
         fetchBtn.addEventListener('click', fetchNow);
+        if (zoomInBtn) zoomInBtn.addEventListener('click', () => zoomBy(1));
+        if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => zoomBy(-1));
+        if (zoomFitBtn) zoomFitBtn.addEventListener('click', () => fitAll());
+        setZoomEnabled(false);
+        if (viewEl) {
+            viewEl.addEventListener('pointerdown', onPointerDown);
+            viewEl.addEventListener('pointermove', onPointerMove);
+            viewEl.addEventListener('pointerup', onPointerUp);
+            viewEl.addEventListener('pointercancel', onPointerUp);
+            viewEl.addEventListener('wheel', onWheel, { passive: false });
+        }
         document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && overlay && !overlay.hidden) close(); });
     }
     return { init, open, close };
